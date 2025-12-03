@@ -1,0 +1,2034 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>火柴人：萬象法則 (v17.1 穩定聯機版)</title>
+    <!-- 引入 PeerJS 用於聯機功能 -->
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #1a1a1a; color: white; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        #game-container { position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
+
+        /* UI Layers */
+        .ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; display: flex; flex-direction: column; }
+
+        /* Selection Screen */
+        #char-select-screen { background: rgba(0, 0, 0, 0.95); z-index: 100; pointer-events: auto; display: flex; flex-direction: row; width: 100%; height: 100%; }
+        .select-left { width: 50%; display: flex; flex-direction: column; align-items: center; height: 100%; overflow-y: auto; padding-top: 20px; border-right: 1px solid #444; }
+        .select-right { width: 50%; height: 100%; padding: 20px; display: flex; flex-direction: column; justify-content: center; background: #222; box-sizing: border-box; }
+
+        .char-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; padding: 10px; }
+        .char-card { width: 80px; height: 100px; border: 2px solid #555; border-radius: 8px; background: #333; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.1s; position: relative; }
+        .char-card.selected { border-color: #ffd700; box-shadow: 0 0 15px #ffd700; transform: scale(1.05); }
+        .new-tag { font-size: 8px; background: #ff00ff; padding: 2px; border-radius: 2px; position:absolute; top:-5px; right:-5px; }
+        .char-icon { font-size: 30px; margin-bottom: 5px; }
+        .char-name { font-size: 10px; text-align: center; color: #ddd; }
+
+        /* Info Panel */
+        #info-panel { text-align: left; display: none; height: 100%; overflow-y: auto; padding-right: 5px; }
+        #info-name { font-size: 24px; font-weight: bold; color: #ffd700; margin-bottom: 5px; }
+        #info-role { font-size: 12px; color: #aaa; margin-bottom: 10px; font-weight: bold; letter-spacing: 1px; }
+        #info-desc { font-style: normal; color: #ddd; margin-bottom: 15px; font-size: 13px; line-height: 1.5; border-left: 3px solid #ffd700; padding-left: 10px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 0 5px 5px 0; }
+        .counter-info { color: #ff6666; font-size: 12px; margin-top: 8px; font-weight: bold; }
+        
+        .skill-section-title { font-size: 16px; color: #fff; border-bottom: 1px solid #555; margin-bottom: 10px; padding-bottom: 5px; margin-top: 10px;}
+        .skill-info { margin-bottom: 10px; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; border: 1px solid #444; }
+        .skill-name { color: #00aaff; font-weight: bold; font-size: 15px; margin-bottom: 3px; display: flex; justify-content: space-between;}
+        .skill-detail { color: #ccc; font-size: 12px; line-height: 1.4; }
+        
+        .btn-group { margin-top: 15px; display: flex; gap: 10px; flex-wrap: wrap; padding-bottom: 20px; }
+        .confirm-btn { flex: 1; background: linear-gradient(135deg, #ff9900 0%, #ff5500 100%); border: none; color: white; padding: 12px; border-radius: 8px; font-size: 18px; font-weight: bold; cursor: pointer; }
+        .confirm-btn:disabled { background: #555; cursor: not-allowed; opacity: 0.5; }
+        .secondary-btn { background: #444; border: 1px solid #666; color: #ddd; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; flex: 0.4; }
+
+        .mode-btn { background: #444; border: 1px solid #fff; color: white; padding: 5px 10px; margin-bottom: 20px; cursor: pointer; border-radius: 5px; width: 90%; }
+
+        /* Online UI */
+        #online-panel { width: 90%; background: #2a2a2a; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: none; border: 1px solid #00aaff; }
+        .online-row { display: flex; gap: 5px; margin-bottom: 5px; }
+        .online-input { flex: 1; background: #111; border: 1px solid #555; color: white; padding: 5px; border-radius: 4px; }
+        .online-btn { background: #0066cc; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .online-status { font-size: 12px; color: #0f0; margin-top: 5px; min-height: 15px; }
+        .copy-btn { background: #444; border: 1px solid #666; color: #ccc; cursor: pointer; }
+
+        /* HUD */
+        .hud { display: flex; justify-content: space-between; padding: 10px 20px; height: 10%; pointer-events: none; }
+        .hp-container { width: 40%; display: flex; flex-direction: column; }
+        .hp-bar { width: 100%; height: 15px; background: #444; border: 2px solid white; margin-top: 5px; transform: skewX(-15deg); overflow: hidden; position: relative; }
+        .hp-fill { height: 100%; transition: width 0.1s linear; } /* Smoother transition for sync */
+        .p1-fill { background: #00aaff; width: 100%; }
+        .p2-fill { background: #ff4444; width: 100%; }
+        .status-text { font-size: 12px; color: yellow; margin-top: 5px; height: 20px; text-shadow: 1px 1px 0 #000; white-space: nowrap; }
+        
+        /* Character Specific UI */
+        .ling-orbs { display: flex; gap: 3px; margin-top: 2px; }
+        .ling-orb { width: 10px; height: 10px; border-radius: 50%; border: 1px solid #fff; background: #333; }
+        .ling-orb.ready { background: #ffff00; box-shadow: 0 0 5px #ffff00; }
+        
+        /* Generic Resource Bar (Ember/Teslam/Graviton) */
+        .resource-bar { width: 100%; height: 5px; background: #333; margin-top: 2px; position: relative; }
+        .resource-fill { height: 100%; background: #ff5500; width: 0%; transition: width 0.1s; }
+        .resource-marker { position: absolute; top: -2px; width: 2px; height: 9px; background: white; z-index: 2;}
+        
+        .combo-text { font-size: 24px; font-weight: bold; font-style: italic; color: #ffcc00; text-shadow: 2px 2px 0 #ff0000; position: absolute; top: 100px; transition: transform 0.1s; opacity: 0; }
+        #p1-combo { left: 10%; } #p2-combo { right: 10%; }
+        
+        #training-msg { position: absolute; top: 80px; width: 100%; text-align: center; color: #0f0; font-weight: bold; font-size: 18px; display: none; text-shadow: 1px 1px 0 #000; }
+
+        /* Controls */
+        .controls-layer { position: absolute; bottom: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
+        .touch-btn { position: absolute; border-radius: 50%; background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.3); pointer-events: auto; display: flex; justify-content: center; align-items: center; color: white; font-weight: bold; backdrop-filter: blur(2px); touch-action: none; transition: all 0.1s; }
+        .touch-btn:active, .touch-btn.active { background: rgba(255, 255, 255, 0.4); transform: scale(0.95); }
+        .cd-overlay { position: absolute; top:0; left:0; right:0; bottom:0; background: rgba(0,0,0,0.7); border-radius: 50%; display: none; justify-content: center; align-items: center; font-size: 14px; }
+
+        /* P1 Layout */
+        .p1-move-left { bottom: 30px; left: 20px; width: 60px; height: 60px; }
+        .p1-move-right { bottom: 30px; left: 90px; width: 60px; height: 60px; }
+        .p1-jump { bottom: 100px; left: 55px; width: 50px; height: 50px; background: rgba(0, 200, 255, 0.2); }
+        .p1-dodge { bottom: 160px; left: 55px; width: 40px; height: 40px; background: rgba(255, 255, 0, 0.2); font-size: 10px;}
+        .p1-atk { bottom: 30px; left: 220px; width: 65px; height: 65px; border-color: #ff9900; background: rgba(255,150,0,0.2); font-size: 12px;}
+        .p1-s1 { bottom: 30px; left: 160px; width: 50px; height: 50px; border-color: #00aaff;}
+        .p1-s2 { bottom: 90px; left: 180px; width: 50px; height: 50px; border-color: #00aaff;}
+        .p1-s3 { bottom: 105px; left: 240px; width: 50px; height: 50px; border-color: #00aaff;}
+        .p1-chat { bottom: 160px; left: 110px; width: 40px; height: 40px; border-color: #fff; background: rgba(100,100,255,0.4); font-size: 16px; }
+
+        /* P2 Layout */
+        .p2-move-right { bottom: 30px; right: 20px; width: 60px; height: 60px; }
+        .p2-move-left { bottom: 30px; right: 90px; width: 60px; height: 60px; }
+        .p2-jump { bottom: 100px; right: 55px; width: 50px; height: 50px; background: rgba(255, 100, 100, 0.2); }
+        .p2-dodge { bottom: 160px; right: 55px; width: 40px; height: 40px; background: rgba(255, 255, 0, 0.2); font-size: 10px;}
+        .p2-atk { bottom: 30px; right: 220px; width: 65px; height: 65px; border-color: #ff9900; background: rgba(255,150,0,0.2); font-size: 12px;}
+        .p2-s1 { bottom: 30px; right: 160px; width: 50px; height: 50px; border-color: #ff4444;}
+        .p2-s2 { bottom: 90px; right: 180px; width: 50px; height: 50px; border-color: #ff4444;}
+        .p2-s3 { bottom: 105px; right: 240px; width: 50px; height: 50px; border-color: #ff4444;}
+        .p2-chat { bottom: 160px; right: 110px; width: 40px; height: 40px; border-color: #fff; background: rgba(255,100,100,0.4); font-size: 16px; }
+
+        .skill-label { font-size: 9px; position: absolute; bottom: -12px; width: 80px; text-align: center; text-shadow: 1px 1px 0 #000; pointer-events: none; left: -15px;}
+
+        #game-over-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; background: rgba(0,0,0,0.95); padding: 30px; border: 2px solid white; text-align: center; z-index: 90; pointer-events: auto; border-radius: 10px; min-width: 300px; }
+        .restart-btn { background: #444; border: 2px solid #fff; padding: 10px 20px; color: white; margin-top: 15px; font-size: 16px; cursor: pointer; border-radius: 5px; }
+        
+        .ai-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 85%; max-width: 500px; background: #2d3748; border: 1px solid #4a5568; padding: 20px; z-index: 200; display: none; color: #e2e8f0; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-height: 80vh; overflow-y: auto;}
+        .ai-btn { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; color: white; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+
+        /* Status Table Style */
+        .status-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .status-table td { padding: 5px; border-bottom: 1px solid #444; }
+        .status-table td:first-child { font-weight: bold; color: #ffd700; width: 30%; }
+
+        /* Ultimate Cut-in */
+        #ult-overlay { position: absolute; top: 30%; left: 0; width: 100%; height: 200px; pointer-events: none; display: none; justify-content: center; align-items: center; z-index: 80; overflow: hidden; }
+        .ult-bg { position: absolute; width: 100%; height: 100%; background: linear-gradient(90deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.8) 50%, rgba(0,0,0,0) 100%); transform: skewX(-20deg); }
+        .ult-text { font-size: 60px; font-weight: 900; color: #fff; text-transform: uppercase; position: relative; text-shadow: 0 0 20px currentColor; animation: ultSlide 1s ease-out; font-style: italic; }
+        @keyframes ultSlide { 0% { transform: translateX(-100%) scale(0.5); opacity: 0; } 50% { transform: translateX(0) scale(1.2); opacity: 1; } 100% { transform: translateX(100%) scale(1); opacity: 0; } }
+
+        @media (max-width: 600px) {
+            #char-select-screen { flex-direction: column; }
+            .select-left { width: 100%; height: 35%; border-right: none; border-bottom: 1px solid #444; }
+            .select-right { width: 100%; height: 65%; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="char-select-screen" class="ui-layer">
+        <div class="select-left">
+            <h2 id="select-title">P1 (藍色) 請選擇</h2>
+            <button id="mode-toggle" class="mode-btn" onclick="toggleMode()">模式：雙人對戰 (本地)</button>
+            
+            <!-- Online Panel -->
+            <div id="online-panel">
+                <div style="color:#00aaff; font-weight:bold; margin-bottom:5px;">🌐 線上聯機大廳</div>
+                <div class="online-row">
+                    <button class="online-btn" onclick="createRoom()">創建房間</button>
+                    <input id="my-room-id" class="online-input" readonly placeholder="等待創建..." style="font-size:10px;">
+                    <button class="online-btn copy-btn" onclick="copyRoomId()">複製</button>
+                </div>
+                <div class="online-row">
+                    <input id="join-room-id" class="online-input" placeholder="輸入朋友的房間號">
+                    <button class="online-btn" onclick="joinRoom()">加入</button>
+                </div>
+                <div id="online-status" class="online-status">離線</div>
+            </div>
+
+            <div class="char-grid" id="char-grid"></div>
+        </div>
+        <div class="select-right">
+            <div id="info-panel">
+                <div id="info-name"></div>
+                <div id="info-role"></div>
+                <div id="info-desc"></div>
+                <div class="skill-section-title">技能詳情</div>
+                <div id="info-skills"></div>
+                <div class="btn-group">
+                    <button id="confirm-btn" class="confirm-btn" onclick="confirmSelection()" disabled>鎖定選擇</button>
+                    <button class="secondary-btn" onclick="askAiForTips()">✨ AI 攻略</button>
+                    <button class="secondary-btn" onclick="showStatusGuide()">📖 狀態圖鑑</button>
+                </div>
+            </div>
+            <div id="info-placeholder" style="color:#666; text-align:center; margin-top:50%;">
+                <div style="font-size:40px; margin-bottom:10px;">👆</div>
+                點擊左側角色頭像<br>查看詳細情報與技能
+            </div>
+        </div>
+    </div>
+
+    <div class="ui-layer">
+        <div id="training-msg">⚔️ 訓練營模式 (無限狀態) ⚔️</div>
+        <div class="hud">
+            <div class="hp-container">
+                <div id="p1-name">Waiting...</div>
+                <div class="hp-bar"><div id="p1-hp" class="hp-fill p1-fill"></div></div>
+                <div id="p1-resource-bar" class="resource-bar" style="display:none;">
+                    <div id="p1-resource-fill" class="resource-fill"></div>
+                    <div class="resource-marker" style="left:33%"></div><div class="resource-marker" style="left:66%"></div>
+                </div>
+                <div id="p1-ling-bar" class="ling-orbs" style="display:none;">
+                    <div class="ling-orb" id="p1-orb-0"></div><div class="ling-orb" id="p1-orb-1"></div><div class="ling-orb" id="p1-orb-2"></div>
+                </div>
+                <div id="p1-status" class="status-text"></div>
+                <div id="p1-combo" class="combo-text"></div>
+            </div>
+            <div class="hp-container" style="align-items: flex-end;">
+                <div id="p2-name">Waiting...</div>
+                <div class="hp-bar"><div id="p2-hp" class="hp-fill p2-fill"></div></div>
+                <div id="p2-resource-bar" class="resource-bar" style="display:none;">
+                    <div id="p2-resource-fill" class="resource-fill"></div>
+                    <div class="resource-marker" style="left:33%"></div><div class="resource-marker" style="left:66%"></div>
+                </div>
+                <div id="p2-ling-bar" class="ling-orbs" style="display:none;">
+                    <div class="ling-orb" id="p2-orb-0"></div><div class="ling-orb" id="p2-orb-1"></div><div class="ling-orb" id="p2-orb-2"></div>
+                </div>
+                <div id="p2-status" class="status-text"></div>
+                <div id="p2-combo" class="combo-text"></div>
+            </div>
+        </div>
+        <div id="ult-overlay">
+            <div class="ult-bg"></div>
+            <div id="ult-text" class="ult-text">ULTIMATE!</div>
+        </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls-layer" id="p1-controls" style="display:none;">
+        <div class="touch-btn p1-move-left" data-key="p1-left">←</div>
+        <div class="touch-btn p1-move-right" data-key="p1-right">→</div>
+        <div class="touch-btn p1-jump" data-key="p1-jump">跳</div>
+        <div class="touch-btn p1-dodge" data-key="p1-dodge">閃<div class="cd-overlay"></div></div>
+        <div class="touch-btn p1-atk" data-key="p1-atk">攻</div>
+        <div class="touch-btn p1-s1" data-key="p1-s0"><span class="skill-label">S1</span><div class="cd-overlay"></div></div>
+        <div class="touch-btn p1-s2" data-key="p1-s1"><span class="skill-label">S2</span><div class="cd-overlay"></div></div>
+        <div class="touch-btn p1-s3" data-key="p1-s2"><span class="skill-label">S3</span><div class="cd-overlay"></div></div>
+        <div class="touch-btn p1-chat" onclick="triggerTaunt('p1')">💬</div>
+    </div>
+
+    <div class="controls-layer" id="p2-controls" style="display:none;">
+        <div class="touch-btn p2-move-right" data-key="p2-right">→</div>
+        <div class="touch-btn p2-move-left" data-key="p2-left">←</div>
+        <div class="touch-btn p2-jump" data-key="p2-jump">跳</div>
+        <div class="touch-btn p2-dodge" data-key="p2-dodge">閃<div class="cd-overlay"></div></div>
+        <div class="touch-btn p2-atk" data-key="p2-atk">攻</div>
+        <div class="touch-btn p2-s1" data-key="p2-s0"><span class="skill-label">S1</span><div class="cd-overlay"></div></div>
+        <div class="touch-btn p2-s2" data-key="p2-s1"><span class="skill-label">S2</span><div class="cd-overlay"></div></div>
+        <div class="touch-btn p2-s3" data-key="p2-s2"><span class="skill-label">S3</span><div class="cd-overlay"></div></div>
+        <div class="touch-btn p2-chat" onclick="triggerTaunt('p2')">💬</div>
+    </div>
+
+    <div id="game-over-msg">
+        <h2 id="winner-text">P1 Wins!</h2>
+        <button class="ai-btn" onclick="generateBattleReport()">📝 AI 賽後講評</button>
+        <button class="restart-btn" onclick="resetGame()">重新開始</button>
+    </div>
+    
+    <div id="ai-modal" class="ai-modal">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; color:#a3bffa">說明 / AI 分析</h3>
+            <span style="cursor:pointer; font-size:24px;" onclick="document.getElementById('ai-modal').style.display='none'">×</span>
+        </div>
+        <div id="ai-content" class="ai-content" style="margin-top:15px;"></div>
+    </div>
+</div>
+
+<script>
+// --- Constants & Config ---
+const apiKey = ""; 
+async function callGemini(p) { 
+    if(!apiKey) return "API Key未設定"; 
+    try {
+        const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({contents:[{parts:[{text:p}]}]})});
+        const d=await r.json();
+        return d.candidates?.[0]?.content?.parts?.[0]?.text || "AI 暫時無法回應...";
+    } catch(e){ return "連線錯誤，請檢查網絡。"; } 
+}
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+window.addEventListener('resize', resize);
+resize();
+
+const GRAVITY = 0.6;
+const GROUND_Y = canvas.height - 100;
+const FRICTION = 0.8;
+let shakeTimer = 0;
+let timeScale = 1.0; 
+
+// --- Data ---
+const CHARACTERS = [
+    {
+        id: 'graviton', name: '重力暴君 - 格拉維頓', icon: '🪐', color: '#4b0082', weapon: 'orb', hp: 110, speed: 2.5,
+        desc: '掌控引力的暴君。核心機制「密度」：攻擊或受擊積攢密度，滿層獲得霸體。W技能可創造重力異常區域。',
+        counters: '克制: 高機動角色 | 被克制: 遠程消耗',
+        skills: [
+            { name: '萬象天引 (Q)', cd: 240, type: 'graviton_pull', desc: '將前方敵人強行吸至身前並造成傷害。' },
+            { name: '重力反轉 (W)', cd: 360, type: 'gravity_shift', desc: '創造重力場(持續5秒)。冷卻時間在領域消失後開始計算。' },
+            { name: '視界吞噬 (E)', cd: 800, type: 'graviton_blackhole', desc: '召喚微型黑洞，持續吸附並傷害全場敵人。' }
+        ]
+    },
+    {
+        id: 'chronos', name: '時光守護者 - 克洛諾斯', icon: '⏳', color: '#b8860b', weapon: 'staff', hp: 90, speed: 3.0,
+        desc: '操控時間的法師。被動：時間膨脹(敵方飛行物減速)。回溯現在會引發悖論爆炸。',
+        counters: '克制: 爆發型 (回溯傷害) | 被克制: 持續傷害',
+        skills: [
+            { name: '時光飛刀 (Q)', cd: 180, type: 'time_dagger', desc: '投擲時間匕首，命中造成傷害並大幅緩速敵人。' },
+            { name: '時光倒流 (W)', cd: 600, type: 'time_rewind', desc: '回到3秒前狀態並回復生命。抵達時引發悖論爆炸擊退敵人。' },
+            { name: '時間靜止 (E)', cd: 900, type: 'time_stop', desc: '暫停全場時間2秒。期間攻擊必定暴擊。' }
+        ]
+    },
+    {
+        id: 'zero', name: '數據崩壞 - 零', icon: '👾', color: '#00ff00', weapon: 'sword', hp: 85, speed: 4.0,
+        desc: '故障的數據體。攻擊帶有隨機性與瞬移。',
+        counters: '克制: 預判型角色 | 被克制: 必中技能',
+        skills: [
+            { name: '錯誤代碼 (Q)', cd: 150, type: 'zero_bug', desc: '投擲隨機效果的故障塊 (傷害/暈眩/擊飛)。' },
+            { name: '系統延遲 (W)', cd: 300, type: 'zero_lag', desc: '自身進入Lag狀態(瞬移閃避攻擊)，持續3秒。' },
+            { name: '強制崩潰 (E)', cd: 700, type: 'zero_crash', desc: '使畫面破裂，造成全屏真實傷害。' }
+        ]
+    },
+    {
+        id: 'teslam', name: '雷霆領主 - 特斯拉姆', icon: '⚡', color: '#00ccff', weapon: 'orb', hp: 100, speed: 3.2,
+        desc: '掌控雷電的飛升者。核心機制「超導共鳴」：普攻(+5%)與技能積攢負荷，在33%、66%、100%時自動「飛升」，回復生命並永久強化技能。滿負荷時可開啟終極形態。',
+        counters: '克制: 召喚系 (AOE清場) | 被克制: 爆發刺客',
+        skills: [
+            { name: '連鎖閃電 (Q)', cd: 180, type: 'teslam_chain', desc: '自動鎖定敵人釋放閃電。飛升強化：傷害提升/留下電弧陷阱/清除敵方增益。' },
+            { name: '雷光屏障 (W)', cd: 360, type: 'teslam_wall', desc: '在敵人前方召喚電牆。飛升強化：範圍變大/發射球狀閃電/向前推進。' },
+            { name: '雷神降世 (E)', cd: 900, type: 'teslam_ult', desc: '【需100%負荷】化身雷神7秒。S1變為機關槍模式，S2變為天雷轟擊。結束後扣除60%負荷。' }
+        ]
+    },
+    {
+        id: 'sera', name: '虛空賽拉', icon: '🔮', color: '#bd00ff', weapon: 'orb', hp: 90, speed: 3.8,
+        desc: '穿梭於虛空的刺客。擁有極高的機動性，利用殘影迷惑對手。核心在於利用殘影複製技能進行多重打擊。',
+        counters: '克制: 遠程射手 (高機動) | 被克制: 範圍控場',
+        skills: [
+            { name: '移形換位 (Q)', cd: 180, type: 'void_swap', desc: '瞬間與場上的一個殘影交換位置。若無殘影則原地製造一個。' },
+            { name: '虛空穿刺 (W)', cd: 260, type: 'void_beam', damage:14, desc: '發射一道無限距離的虛空雷射，造成直線傷害。' },
+            { name: '鏡像迴響 (E)', cd: 480, type: 'void_echo', desc: '命令所有殘影模仿本體上一次使用的技能(位移或雷射)。' }
+        ]
+    },
+    {
+        id: 'ember', name: '均衡毀滅者 - 燼滅', icon: '🔥', color: '#ff5500', weapon: 'orb', hp: 100, speed: 3.2,
+        desc: '行走在毀滅邊緣的法師。能量自動快速回復，技能越強，超過75%過載(大幅增傷)，100%崩解(暈眩)。',
+        counters: '克制: 坦克 (高爆發) | 被克制: 靈活刺客',
+        skills: [
+            { name: '不穩定脈衝 (Q)', cd: 180, type: 'ember_pulse', desc: '發射脈衝，再次按下引爆。過載時傷害翻倍。' },
+            { name: '能量過載 (W)', cd: 480, type: 'ember_overload_buff', desc: '鎖定能量獲得護盾與增傷。結束後短暫衰竭。' },
+            { name: '虛空奇點 (E)', cd: 600, type: 'ember_singularity', desc: '創造黑洞吸附敵人並回能。' }
+        ]
+    },
+    {
+        id: 'bomber', name: '爆破專家', icon: '💣', color: '#ff6600', weapon: 'bomb', hp: 95, speed: 3.2,
+        desc: '範圍傷害專家。所有技能都帶有爆炸效果。(Buff: 炸彈範圍與傷害提升)',
+        counters: '克制: 陣地戰角色 | 被克制: 飛行/高機動',
+        skills: [
+            { name: '定時炸彈 (Q)', cd: 180, type: 'proj_bomb', damage:35, desc: '投擲延時炸彈，爆炸造成燃燒。' },
+            { name: '火箭跳 (W)', cd: 240, type: 'jump_atk', damage:20, desc: '利用爆炸反衝力跳起，落地造成傷害。' },
+            { name: '自爆無人機 (E)', cd: 500, type: 'summon_drone', damage:45, desc: '釋放自動追蹤無人機。' }
+        ]
+    },
+    {
+        id: 'samsara', name: '輪迴 (Samsara)', icon: '☯️', color: '#ffffff', weapon: 'staff', hp: 85, speed: 3.5,
+        desc: '因果悖論的化身。血量即「因果負荷」。血量低坦度高CD長；血量高CD快但脆皮。',
+        counters: '克制: 持續輸出 | 被克制: 斬殺型角色',
+        skills: [
+            { name: '業火纏身 (Q)', cd: 60, type: 'samsara_q', desc: '噴射業火，傷害取決於血量>50%的部分。釋放後重置回50%血。' },
+            { name: '命線回溯 (W)', cd: 480, type: 'samsara_w', desc: '解除自身與敵人所有狀態。若成功解控則回血。' },
+            { name: '宿命置換 (E)', cd: 600, type: 'samsara_e', desc: '連結敵人共享傷害。連結期間回血至90%觸發過載爆發。' }
+        ]
+    },
+    {
+        id: 'lingxiao', name: '仙罡御騎 - 凌霄', icon: '☁️', color: '#e6e6fa', weapon: 'staff', hp: 105, speed: 3.0,
+        desc: '以自身為陣眼的重型法師。需管理「丹元」，消耗過快會「淤滯」。',
+        counters: '克制: 近戰突進 | 被克制: 遠程消耗',
+        skills: [
+            { name: '九霄墜星陣 (Q)', cd: 300, type: 'ling_q', desc: '布陣召喚星輝墜落，造成傷害與碎甲。' },
+            { name: '周天護身陣 (W)', cd: 480, type: 'ling_w', desc: '獲得減傷並緩慢回血。' },
+            { name: '縛仙鎖靈陣 (E)', cd: 600, type: 'ling_e', desc: '射出符咒展開縛仙陣，禁錮敵人。' }
+        ]
+    },
+    {
+        id: 'khaos', name: '萬象編織者 - 卡俄斯', icon: '🌀', color: '#ff00ff', weapon: 'orb', hp: 90, speed: 3.2,
+        desc: '規則的化身。通過篡改戰場規則(因果律)來取勝。',
+        counters: '克制: 依賴連招 | 被克制: 簡單粗暴角色',
+        skills: [
+            { name: '因果篡改 (Q)', cd: 240, type: 'khaos_link', desc: '連結對手，吸血或反傷。' },
+            { name: '定律覆寫 (W)', cd: 360, type: 'khaos_field', desc: '創造悖論領域，反轉移動或治療/傷害。' },
+            { name: '萬象歸寂 (E)', cd: 900, type: 'khaos_ult', desc: '終極技能。強制全場禁武(沉默)與易傷。' }
+        ]
+    },
+    {
+        id: 'ohm', name: '能量導體 - 歐姆', icon: '🔋', color: '#00ffff', weapon: 'orb', hp: 100, speed: 3.2,
+        desc: '防守反擊大師。吸收傷害轉化為儲能。技能具有高優先級，不會被普攻抵消。',
+        counters: '克制: 高頻率攻擊 | 被克制: 抓技/破防',
+        skills: [ 
+            { name: '能量吸收 (Q)', cd: 480, type: 'ohm_absorb', desc: '展開護盾吸收傷害轉化為儲能。' }, 
+            { name: '能量釋放 (W)', cd: 120, type: 'ohm_release', desc: '消耗儲能發射能量彈(穿透普攻)。' }, 
+            { name: '過載爆發 (E)', cd: 600, type: 'ohm_overload', desc: '引爆儲能造成毀滅打擊。' } 
+        ]
+    },
+    { id: 'gale', name: '疾風武者 - 嵐', icon: '🌪️', color: '#aaddff', weapon: 'sword', hp: 85, speed: 4.5, desc: '極致速度的劍客。', counters: '克制: 笨重坦克 | 被克制: 必中/追蹤', skills: [ {name:'風刃連斬', cd:120, type: 'proj_fast', damage:10, desc:'快速揮出風刃。'}, {name:'瞬風閃', cd:240, type: 'dash_dmg', damage:20, desc:'化為疾風突進。'}, {name:'狂風絕息', cd:600, type: 'aoe_self', radius:150, damage:40, desc:'爆發風暴擊飛周圍敵人。'} ] },
+    { id: 'titan', name: '泰坦巨神', icon: '🗿', color: '#8b4513', weapon: 'hammer', hp: 130, speed: 2.2, desc: '擁有霸體的重裝戰士。', counters: '克制: 近戰刺客 | 被克制: 風箏/真實傷害', skills: [ {name:'巨神擊', cd:200, type: 'proj_heavy', damage:30, desc:'投擲巨石。'}, {name:'不壞之軀', cd:500, type: 'buff', buffType: 'defense_up', duration:240, desc:'大幅提升防禦力。'}, {name:'地動山搖', cd:700, type: 'aoe_ground', damage:35, desc:'重擊地面造成全屏震盪。'} ] },
+    { id: 'blade', name: '疾風劍聖', icon: '⚔️', color: '#33ccff', weapon: 'sword', hp: 100, speed: 3.2, desc: '傳統近戰強者。', counters: '克制: 脆皮法師 | 被克制: 坦克/反傷', skills: [ {name:'居合斬', cd:120, type: 'dash_dmg', damage:25, desc:'突進斬擊。'}, {name:'劍刃風暴', cd:300, type: 'aoe_self', radius:120, damage:30, desc:'旋轉劍刃造成破甲。'}, {name:'心眼', cd:400, type: 'buff', buffType: 'counter', duration:60, desc:'招架並反彈傷害。'} ] },
+    { id: 'archer', name: '獵魔弓手', icon: '🏹', color: '#99ff33', weapon: 'bow', hp: 85, speed: 3.8, desc: '靈活的遠程輸出。', counters: '克制: 短腿近戰 | 被克制: 突進刺客', skills: [ {name:'多重射擊', cd:100, type: 'proj_multi', damage:8, desc:'扇形射出五支箭矢。'}, {name:'捕獸夾', cd:300, type: 'trap', damage:15, duration:300, desc:'放置陷阱，踩中暈眩流血。'}, {name:'後跳射擊', cd:240, type: 'evade_shot', damage:20, desc:'後跳並射擊。'} ] },
+    { id: 'paladin', name: '聖光騎士', icon: '🛡️', color: '#ffcc00', weapon: 'hammer', hp: 120, speed: 2.8, desc: '堅不可摧的坦克。', counters: '克制: 刺客/爆發 | 被克制: 真實傷害/風箏', skills: [ {name:'正義之錘', cd:150, type: 'proj_heavy', damage:20, desc:'投擲錘子。'}, {name:'聖光治癒', cd:600, type: 'heal', amount:25, desc:'回血並減傷。'}, {name:'審判領域', cd:600, type: 'aoe_ground', damage:20, desc:'重擊地面造成虛弱。'} ] },
+    { id: 'necro', name: '死靈法師', icon: '💀', color: '#aa00ff', weapon: 'staff', hp: 90, speed: 3.0, desc: '折磨敵人的黑法師。', counters: '克制: 坦克 (百分比/毒) | 被克制: 淨化/高爆發', skills: [ {name:'靈魂火', cd:80, type: 'proj_homing', damage:12, desc:'追蹤彈施加中毒。'}, {name:'召喚骷髏', cd:600, type: 'summon', hp:30, damage:5, desc:'召喚骷髏兵。'}, {name:'生命汲取', cd:400, type: 'drain', range:300, damage:20, desc:'吸取生命。'} ] },
+    { id: 'assassin', name: '幻影刺客', icon: '🥷', color: '#cccccc', weapon: 'sword', hp: 80, speed: 4.2, desc: '高爆發的脆皮殺手。', counters: '克制: 射手/法師 | 被克制: 坦克/控制', skills: [ {name:'苦無', cd:50, type: 'proj_fast', damage:8, desc:'投擲苦無緩速。'}, {name:'影分身', cd:300, type: 'clone', duration:180, desc:'製造分身迷惑。'}, {name:'瞬步', cd:360, type: 'teleport_back', damage:30, desc:'背刺。'} ] }
+];
+
+// --- Global Vars ---
+let players = [], projectiles = [], effects = [], floatingTexts = [], gameState = 'SELECT';
+let p1CharIndex = -1, p2CharIndex = -1, turn = 'P1', gameMode = 'PVP'; // PVP, PVE, TRAINING, ONLINE
+let inputState = { p1: {}, p2: {} };
+let globalRule = null; 
+let globalRuleTimer = 0;
+let activeTimers = [];
+let gameLoopId = null;
+let weatherSystem = null;
+
+// --- Online Vars ---
+let peer = null;
+let conn = null;
+let myRoomId = null;
+let isHost = false;
+let onlineRole = null; // 'p1' or 'p2'
+
+// --- Classes ---
+class GameObject { constructor(x,y,c){this.x=x;this.y=y;this.color=c;this.marked=false;} }
+
+class WeatherSystem {
+    constructor() {
+        this.particles = [];
+        this.type = Math.random() > 0.7 ? (Math.random() > 0.5 ? 'rain' : 'embers') : 'none';
+    }
+    update() {
+        if (this.type === 'none') return;
+        if (this.particles.length < 100) {
+            if (this.type === 'rain') this.particles.push({x: Math.random()*canvas.width, y: -10, vy: 10+Math.random()*5, len: 10+Math.random()*10, color: 'rgba(0,255,100,0.3)'});
+            if (this.type === 'embers') this.particles.push({x: Math.random()*canvas.width, y: canvas.height+10, vy: -1-Math.random()*2, vx: (Math.random()-0.5)*2, size: Math.random()*3, color: 'rgba(255,100,0,0.5)'});
+        }
+        this.particles.forEach(p => {
+            p.x += (p.vx || 0) * timeScale;
+            p.y += p.vy * timeScale;
+            if (p.y > canvas.height + 20 || p.y < -20) { p.marked = true; }
+        });
+        this.particles = this.particles.filter(p => !p.marked);
+    }
+    draw(ctx) {
+        if (this.type === 'none') return;
+        ctx.save();
+        this.particles.forEach(p => {
+            ctx.fillStyle = p.color; ctx.strokeStyle = p.color;
+            if (this.type === 'rain') { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y+p.len); ctx.stroke(); }
+            else { ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill(); }
+        });
+        ctx.restore();
+    }
+}
+
+class FloatingText {
+    constructor(x, y, text, color, life=60) {
+        this.x = x; this.y = y; this.text = text; this.color = color; this.life = life; this.vy = -1;
+    }
+    update() { this.y += this.vy * timeScale; this.life -= 1 * timeScale; }
+    draw(ctx) {
+        ctx.globalAlpha = Math.max(0, this.life/60);
+        ctx.fillStyle = this.color; ctx.font = "bold 16px Arial"; ctx.textAlign = "center";
+        ctx.fillText(this.text, this.x, this.y);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Particle extends GameObject {
+    constructor(x, y, color, vx, vy, size, life) { super(x, y, color); this.vx = vx; this.vy = vy; this.size = size; this.life = life; this.maxLife = life; }
+    update() { 
+        this.x += this.vx * timeScale; this.y += this.vy * timeScale; 
+        this.life -= 1 * timeScale; this.size *= 0.95; 
+        if(this.life <= 0) this.marked=true; 
+    }
+    draw(ctx) { ctx.globalAlpha = this.life / this.maxLife; ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0; }
+}
+
+class Player {
+    constructor(id, x, data) {
+        this.id = id; this.x = x; this.y = GROUND_Y; this.vx = 0; this.vy = 0;
+        this.data = data; this.hp = data.hp; this.maxHp = data.hp; this.color = data.color;
+        this.facingRight = id === 'p1'; this.cooldowns = [0,0,0]; this.atkCd = 0;
+        this.stunTimer = 0; this.invincible = 0; this.buffs = [];
+        this.aiTimer = 0; this.inputAI = {left:false,right:false,jump:false};
+        
+        this.rings = [0, 0, 0]; this.causalLink = false; 
+        this.ohmStorage = 0; this.isAbsorbing = false; 
+        this.remnantTimer = 0; this.lastSkill = null; 
+        
+        this.energy = 0; 
+        this.exhaustionTimer = 0;
+        this.overloadBuff = 0; 
+        this.emberPulseActive = false; 
+        
+        this.ascensionLevel = 0; 
+        this.thorMode = false;
+        this.thorTimer = 0;
+
+        this.danyuan = 3; 
+        this.danyuanTimers = [0, 0, 0]; 
+        this.stasisTimer = 0; 
+        this.lingRecentUsage = []; 
+        this.xiangangStacks = 0;
+        this.xiangangTimer = 0;
+
+        this.history = []; 
+        this.historyTimer = 0;
+        this.timeStopActive = false;
+        
+        this.lagMode = false;
+
+        if (this.data.id === 'samsara') {
+            this.hp = 85; this.maxHp = 100; 
+        }
+
+        this.combo = 0; this.comboTimer = 0;
+        this.dodgeTimer = 0; 
+    }
+
+    update() {
+        // --- Online Sync Logic ---
+        // 如果是聯機模式且不是房主(Client)，則不進行物理計算，只進行插值平滑移動
+        if (gameMode === 'ONLINE' && !isHost) {
+             // 客戶端只負責渲染，物理位置由主機同步
+             // 簡單插值讓移動看起來不那麼卡頓
+             // 注意：實際位置會在 conn.on('data') 中被強制覆蓋
+             return;
+        }
+        // -------------------------
+
+        if(this.hp <= 0) return;
+        if (isNaN(this.x) || isNaN(this.y)) { this.x = this.id==='p1'?100:canvas.width-100; this.y = GROUND_Y; this.vx=0; this.vy=0; }
+
+        if (this.data.id === 'chronos') {
+            this.historyTimer++;
+            if (this.historyTimer % 30 === 0) { 
+                this.history.push({x: this.x, y: this.y, hp: this.hp});
+                if (this.history.length > 10) this.history.shift(); 
+            }
+        }
+
+        const enemy = players.find(p => p.id !== this.id);
+        if (enemy && enemy.timeStopActive && this.data.id !== 'chronos') return; 
+
+        if (gameMode === 'PVE' && this.id === 'p2' && this.stunTimer <= 0) this.updateAI();
+
+        let inp = (gameMode === 'PVE' && this.id==='p2') ? this.inputAI : (inputState[this.id] || {});
+        
+        const paradox = effects.find(e => e instanceof Trap && e.type === 'khaos_field');
+        let moveLeft = inp.left, moveRight = inp.right;
+        if (paradox && Math.abs(this.x - paradox.x) < 150 && this.data.id !== 'khaos' && paradox.subType === 'law') {
+             if (Math.floor(Date.now()/500) % 2 === 0) { moveLeft = inp.right; moveRight = inp.left; }
+        }
+
+        if(this.stunTimer > 0) {
+            this.stunTimer -= 1 * timeScale; 
+        } else {
+            let speedMod = 1.0;
+            if (this.buffs.find(b=>b.type==='slow_short')) speedMod = 0.5;
+            if (this.buffs.find(b=>b.type==='grounded')) speedMod = 0.6;
+            if (this.buffs.find(b=>b.type==='high_gravity')) speedMod = 0.4; 
+            if (this.buffs.find(b=>b.type==='anti_gravity')) speedMod = 1.5; 
+
+            if (this.data.id === 'ember') {
+                if (this.exhaustionTimer > 0) { this.exhaustionTimer -= 1 * timeScale; speedMod = 0.5; } 
+                else if (this.energy < 100) { this.energy = Math.min(100, this.energy + 0.25 * timeScale); } 
+                if (this.energy >= 100 && this.stunTimer <= 0 && this.exhaustionTimer <= 0) {
+                    this.stunTimer = 90; this.energy = 0; this.cooldowns = [0,0,0]; 
+                    floatingTexts.push(new FloatingText(this.x, this.y-50, "💥 MELTDOWN!", "red"));
+                    createExplosion(this.x, this.y-30, 'orange', 20); shakeScreen();
+                }
+            }
+            
+            if (this.data.id === 'teslam') {
+                if (this.thorMode) {
+                    this.thorTimer -= 1 * timeScale;
+                    if (this.thorTimer <= 0) {
+                        this.thorMode = false;
+                        this.energy = Math.max(0, this.energy - 60); 
+                        floatingTexts.push(new FloatingText(this.x, this.y-60, "THOR MODE END", "#00ccff"));
+                    }
+                }
+            }
+            
+            if (this.data.id === 'zero' && this.lagMode) {
+                if (Math.random() < 0.2) {
+                    this.x += (Math.random() - 0.5) * 40; 
+                }
+            }
+            
+            if (this.data.id === 'lingxiao') {
+                if (this.stasisTimer > 0) { this.stasisTimer -= 1 * timeScale; speedMod = 0.8; }
+                for(let i=0; i<3; i++) { if (this.danyuanTimers[i] > 0) { this.danyuanTimers[i] -= 1 * timeScale; if (this.danyuanTimers[i] <= 0) this.danyuan++; } }
+                if(this.xiangangTimer > 0) { this.xiangangTimer -= 1 * timeScale; if(this.xiangangTimer <= 0) this.xiangangStacks = 0; }
+                let allOnCd = true; for(let i=0; i<3; i++) if (this.danyuanTimers[i] <= 0) allOnCd = false;
+                if (allOnCd && this.cooldowns[0] > 0) { this.buffs.push({type: 'defense_up', timer: 180}); this.cooldowns[0] = 0; floatingTexts.push(new FloatingText(this.x, this.y-60, "RESONANCE!", "#e6e6fa")); updateCd(this.id, 0, 0); }
+            }
+
+            if(moveLeft) { this.vx -= 1 * timeScale; this.facingRight = false; }
+            if(moveRight) { this.vx += 1 * timeScale; this.facingRight = true; }
+            
+            if(inp.jump && this.y >= GROUND_Y) { 
+                if (this.buffs.find(b=>b.type==='high_gravity')) {
+                     this.vy = -5; 
+                } else if (this.buffs.find(b=>b.type==='anti_gravity')) {
+                     this.vy = -18; 
+                } else {
+                     this.vy = -12; 
+                }
+            }
+            
+            const limit = this.data.speed * speedMod;
+            this.vx = Math.max(-limit, Math.min(limit, this.vx));
+        }
+        
+        let g = GRAVITY;
+        if (this.buffs.find(b=>b.type==='high_gravity')) g = GRAVITY * 2.5;
+        if (this.buffs.find(b=>b.type==='anti_gravity')) g = GRAVITY * 0.4;
+        
+        this.vy += g * timeScale; this.vx *= FRICTION; 
+        this.x += this.vx * timeScale; this.y += this.vy * timeScale;
+        if(this.y > GROUND_Y) { this.y = GROUND_Y; this.vy = 0; }
+        if(this.x < 20) this.x = 20; if(this.x > canvas.width-20) this.x = canvas.width-20;
+        
+        let cdRate = 1 * timeScale;
+        if (paradox && Math.abs(this.x - paradox.x) < 150 && paradox.subType === 'cause') cdRate = 2 * timeScale; 
+        if (globalRule === 'silence') cdRate = 0.5 * timeScale; 
+        if (gameMode === 'TRAINING') cdRate = 10; 
+
+        if (this.data.id === 'samsara') {
+            if (this.hp > 50) cdRate = (1 + (this.hp - 50) * 0.04) * timeScale; else cdRate = 0.5 * timeScale;
+            if (this.hp > 50) this.hp -= 0.02 * timeScale; else if (this.hp < 50) this.hp += 0.02 * timeScale;
+        }
+
+        this.cooldowns = this.cooldowns.map(c => c > 0 ? c - cdRate : 0);
+        if(this.atkCd > 0) this.atkCd -= 1 * timeScale;
+        if(this.invincible > 0) this.invincible -= 1 * timeScale;
+        if(this.dodgeTimer > 0) this.dodgeTimer -= 1 * timeScale;
+        
+        this.buffs = this.buffs.filter(b => {
+            b.timer -= 1 * timeScale;
+            if (Math.floor(b.timer) % 60 === 0) {
+                if (b.type === 'poison') this.takeDamage(3, null, 'dot');
+                if (b.type === 'bleed' && Math.abs(this.vx) > 1) this.takeDamage(5, null, 'dot');
+                if (b.type === 'burn') this.takeDamage(4, null, 'dot');
+                if (b.type === 'ling_regen') this.heal(1); 
+                if (b.type === 'electric_arc') this.takeDamage(1, null, 'dot'); 
+                if (b.type === 'high_gravity') this.takeDamage(2, null, 'dot'); 
+            }
+            return b.timer > 0;
+        });
+
+        if(this.causalLink) this.causalLink -= 1 * timeScale; 
+        if(this.comboTimer > 0) { this.comboTimer -= 1 * timeScale; if(this.comboTimer<=0) this.combo=0; }
+
+        if (this.data.id === 'sera' && Math.abs(this.vx) > 3 && ++this.remnantTimer > 60) {
+            this.spawnRemnant(); this.remnantTimer = 0;
+        }
+        
+        if (this.timeStopActive) {
+            this.timeStopActive--;
+            if (this.timeStopActive <= 0) floatingTexts.push(new FloatingText(this.x, this.y-80, "TIME RESUME", "#b8860b"));
+        }
+    }
+
+    updateAI() {
+        this.aiTimer++;
+        if (this.aiTimer < 30) return; 
+        if (this.aiTimer % 30 === 0) {
+            const enemy = players.find(p => p.id !== this.id);
+            if(!enemy) return;
+            const dist = Math.abs(this.x - enemy.x);
+            this.facingRight = enemy.x > this.x;
+            
+            let keepDist = false;
+            if (this.data.weapon === 'bow' || this.data.weapon === 'staff') keepDist = true;
+
+            if (keepDist) {
+                 if (dist < 200) this.inputAI = {left: !this.facingRight, right: this.facingRight, jump: Math.random()<0.2};
+                 else if (dist > 400) this.inputAI = {left: this.facingRight, right: !this.facingRight, jump: false};
+                 else this.inputAI = {left: false, right: false, jump: false};
+            } else {
+                 if (dist > 60) this.inputAI = {left: this.facingRight, right: !this.facingRight, jump: Math.random()<0.1};
+                 else this.inputAI = {left: false, right: false, jump: false};
+            }
+            
+            if (this.data.id === 'ember' && this.energy >= 75 && this.cooldowns[0]<=0) this.useSkill(0); 
+            if (this.data.id === 'teslam' && this.energy >= 100 && this.cooldowns[2]<=0) this.useSkill(2);
+            if (this.data.id === 'lingxiao' && this.danyuan > 0 && Math.random() < 0.5) this.useSkill(Math.floor(Math.random()*3));
+            if (this.data.id === 'samsara') { if(this.hp > 60) this.useSkill(0); }
+            if (this.data.id === 'chronos' && this.hp < 50 && this.cooldowns[1] <= 0) this.useSkill(1); 
+            if (this.data.id === 'graviton' && dist < 150 && this.cooldowns[0] <= 0) this.useSkill(0);
+            if (this.data.id === 'graviton' && this.cooldowns[1] <= 0 && dist < 200) this.useSkill(1); 
+
+            if (Math.random() < 0.4) {
+                const sIdx = Math.floor(Math.random()*3);
+                if (this.cooldowns[sIdx] <= 0) this.useSkill(sIdx);
+                else if (dist < 100 && this.atkCd <= 0) this.basicAttack();
+            }
+        }
+    }
+
+    addCombo() {
+        this.combo++;
+        this.comboTimer = 120; 
+        const el = document.getElementById(this.id + '-combo');
+        el.innerText = this.combo + " HITS!";
+        el.style.opacity = 1;
+        el.style.transform = "scale(1.5)";
+        setTimeout(() => el.style.transform = "scale(1)", 100);
+        setTimeout(() => { if(this.comboTimer<=0) el.style.opacity=0; }, 2000);
+        
+        if (this.data.id === 'lingxiao' && this.xiangangStacks < 4) {
+            this.xiangangStacks++; this.xiangangTimer = 300; 
+            floatingTexts.push(new FloatingText(this.x, this.y-70, `仙罡 x${this.xiangangStacks}`, "#e6e6fa"));
+        }
+        if (this.data.id === 'graviton') {
+            this.energy = Math.min(100, this.energy + 5); 
+        }
+    }
+
+    addLoad(amount) {
+        if (this.data.id !== 'teslam' || this.thorMode) return;
+        const oldEnergy = this.energy;
+        this.energy = Math.min(100, this.energy + amount);
+        
+        if (oldEnergy < 33 && this.energy >= 33 && this.ascensionLevel < 1) this.ascend(1);
+        if (oldEnergy < 66 && this.energy >= 66 && this.ascensionLevel < 2) this.ascend(2);
+        if (oldEnergy < 100 && this.energy >= 100 && this.ascensionLevel < 3) this.ascend(3);
+    }
+
+    ascend(level) {
+        this.ascensionLevel = level;
+        this.heal(10); 
+        floatingTexts.push(new FloatingText(this.x, this.y-80, `ASCENSION TIER ${level}!`, "#00ccff"));
+        createExplosion(this.x, this.y, '#00ccff', 30);
+        shakeScreen();
+    }
+
+    draw(ctx) {
+        if(this.hp <= 0) return;
+        if(this.invincible > 0 && Math.floor(Date.now()/50)%2===0) return;
+        const hw = this.facingRight ? 1 : -1;
+        
+        if (this.isAbsorbing) {
+            ctx.save(); ctx.strokeStyle = '#00ffff'; ctx.lineWidth = 3; ctx.setLineDash([5, 5]); ctx.beginPath(); ctx.arc(this.x, this.y-30, 45, 0, Math.PI*2); ctx.stroke(); ctx.fillStyle = 'rgba(0, 255, 255, 0.2)'; ctx.fill(); ctx.restore();
+        }
+
+        if (this.thorMode) {
+            ctx.save(); ctx.strokeStyle = '#00ccff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(this.x, this.y-30, 40 + Math.random()*5, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+        }
+        
+        if (this.data.id === 'zero' && this.lagMode) {
+             ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = '#0f0'; ctx.fillRect(this.x-15, this.y-60, 30, 60); ctx.restore();
+        }
+
+        ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+        const hx = this.x + hw*15, hy = this.y-30;
+        if(this.data.weapon === 'sword') { ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx+hw*30, hy-10); ctx.stroke(); }
+        else if(this.data.weapon === 'bow') { ctx.beginPath(); ctx.arc(hx+hw*10, hy, 15, -1.5, 1.5, this.facingRight); ctx.stroke(); }
+        else if(this.data.weapon === 'staff' || this.data.weapon === 'orb') { ctx.beginPath(); ctx.arc(hx+hw*10, hy-10, 5, 0, Math.PI*2); ctx.fillStyle = this.color; ctx.fill(); }
+        else if(this.data.weapon === 'hammer') { ctx.fillStyle='#888'; ctx.fillRect(hx+hw*10, hy-20, 20, 15); }
+        ctx.restore();
+
+        ctx.strokeStyle = this.color; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.arc(this.x, this.y-60, 10, 0, Math.PI*2);
+        ctx.moveTo(this.x, this.y-50); ctx.lineTo(this.x, this.y-25);
+        ctx.moveTo(this.x, this.y-25); ctx.lineTo(this.x-10, this.y);
+        ctx.moveTo(this.x, this.y-25); ctx.lineTo(this.x+10, this.y);
+        ctx.moveTo(this.x, this.y-50); ctx.lineTo(hx, hy);
+        ctx.stroke();
+        
+        if(this.stunTimer>0) ctx.fillText('💫', this.x-5, this.y-80);
+        if(this.causalLink) { ctx.strokeStyle='red'; ctx.beginPath(); ctx.moveTo(this.x, this.y-60); const e=players.find(p=>p.id!==this.id); if(e) ctx.lineTo(e.x, e.y-60); ctx.stroke(); }
+        if(this.data.id==='khaos') this.drawRings(ctx);
+        if (this.buffs.find(b=>b.type==='fate_link')) { ctx.strokeStyle='white'; ctx.setLineDash([2,2]); ctx.beginPath(); ctx.moveTo(this.x, this.y-40); const e=players.find(p=>p.id!==this.id); ctx.lineTo(e.x, e.y-40); ctx.stroke(); ctx.setLineDash([]); }
+        
+        const statusEl = document.getElementById(this.id + '-status');
+        let statusStr = "";
+        
+        if (this.data.id === 'ember' || this.data.id === 'teslam' || this.data.id === 'graviton') {
+            const bar = document.getElementById(this.id+'-resource-fill');
+            const container = document.getElementById(this.id+'-resource-bar');
+            if(container) {
+                container.style.display = 'block';
+                bar.style.width = this.energy + '%';
+                bar.style.backgroundColor = this.energy > 75 ? 'red' : (this.data.id==='teslam'?'#00ccff':(this.data.id==='graviton'?'#4b0082':'#ff5500'));
+            }
+            if (this.data.id === 'ember') {
+                if (this.energy > 75) statusStr += " [OVERLOAD] ";
+                if (this.exhaustionTimer > 0) statusStr += " [EXHAUST] ";
+            } else if (this.data.id === 'teslam') {
+                statusStr += ` [TIER ${this.ascensionLevel}]`;
+                if (this.thorMode) statusStr += " [THOR]";
+            } else if (this.data.id === 'graviton') {
+                statusStr += ` [DENSITY: ${Math.floor(this.energy)}%]`;
+                if (this.energy >= 100) statusStr += " [UNSTOPPABLE]";
+            }
+        }
+
+        if (this.data.id === 'ohm') statusStr += '⚡'.repeat(this.ohmStorage);
+        if (this.data.id === 'lingxiao') {
+            if (this.stasisTimer > 0) statusStr += " [🐌]";
+            if (this.xiangangStacks > 0) statusStr += ` [✨x${this.xiangangStacks}]`;
+            const cont = document.getElementById(this.id+'-ling-bar');
+            cont.style.display = 'flex';
+            for(let i=0; i<3; i++) {
+                const orb = document.getElementById(`${this.id}-orb-${i}`);
+                if (this.danyuanTimers[i] <= 0) orb.classList.add('ready');
+                else orb.classList.remove('ready');
+            }
+        }
+        if (this.data.id === 'samsara') {
+            statusStr += ` [LOAD: ${Math.floor(this.hp)}%]`;
+        }
+
+        if (this.isAbsorbing) statusStr += " [ABSORB]";
+        if (this.invincible>0) statusStr += " [INV]";
+        this.buffs.forEach(b => {
+            if(b.type==='poison') statusStr += " [☠️]";
+            if(b.type==='weak') statusStr += " [📉]";
+            if(b.type==='bleed') statusStr += " [🩸]";
+            if(b.type==='burn') statusStr += " [🔥]";
+            if(b.type==='slow_short' || b.type==='grounded') statusStr += " [❄️]";
+            if(b.type==='defense_up') statusStr += " [🛡️]";
+            if(b.type==='vulnerable' || b.type==='shatter') statusStr += " [💔]";
+            if(b.type==='fate_link') statusStr += " [🔗]";
+            if(b.type==='high_gravity') statusStr += " [⬇️HIGH G]";
+            if(b.type==='anti_gravity') statusStr += " [⬆️ZERO G]";
+        });
+        statusEl.innerText = statusStr;
+    }
+
+    drawRings(ctx) {
+        const cols = ['red', 'lime', 'blue'];
+        for(let i=0; i<3; i++) {
+            ctx.fillStyle = cols[i];
+            const h = (this.rings[i] / 100) * 10;
+            ctx.fillRect(this.x - 20 + i*15, this.y - 90 - h, 10, h);
+            ctx.strokeRect(this.x - 20 + i*15, this.y - 100, 10, 10);
+        }
+    }
+
+    basicAttack() {
+        if(this.atkCd > 0 || this.stunTimer > 0 || this.isAbsorbing || this.stasisTimer > 0) return;
+        this.atkCd = 30;
+        const enemy = players.find(p=>p.id!==this.id);
+        if(enemy) this.facingRight = enemy.x > this.x; 
+        const dir = this.facingRight ? 1 : -1;
+        if (globalRule === 'silence') return; 
+
+        if (this.data.id === 'necro' && enemy) enemy.applyStatus('poison', 180);
+        if (this.data.id === 'paladin' && enemy) enemy.applyStatus('weak', 180);
+        
+        if (this.data.id === 'teslam') {
+             if (enemy && getDist(this.x, this.y, enemy.x, enemy.y) < 80) this.addLoad(5); 
+        }
+        
+        let dmg = 3;
+        if (this.data.id === 'chronos' && this.timeStopActive) dmg *= 2;
+
+        if(['sword','hammer'].includes(this.data.weapon) || this.data.id === 'assassin') {
+            createExplosion(this.x+dir*30, this.y-30, '#fff', 5);
+            projectiles.push(new Projectile(this.id, this.x+dir*30, this.y-30, dir*12, 0, {type:'sword_wave', damage:6, color:this.color, life:20}));
+        } else {
+            let type='basic', speed=12, grav=false;
+            if(this.data.weapon==='bomb') { type='proj_bomb'; speed=8; grav=true; }
+            projectiles.push(new Projectile(this.id, this.x+dir*20, this.y-30, dir*speed, grav?-5:0, {type, damage:dmg, color:this.color, gravity:grav}));
+        }
+    }
+    
+    applyStatus(type, duration) {
+        if (type === 'shatter') {
+             const existing = this.buffs.find(b => b.type === 'shatter');
+             if (existing && existing.stacks < 2) existing.stacks++;
+             else if (!existing) this.buffs.push({type: 'shatter', timer: duration, stacks: 1});
+             floatingTexts.push(new FloatingText(this.x, this.y-50, "SHATTERED", "gray"));
+             return;
+        }
+        if (!this.buffs.find(b => b.type === type)) {
+            this.buffs.push({type, timer: duration});
+            let text = type;
+            if(type==='poison') text="POISONED";
+            if(type==='weak') text="WEAKENED";
+            if(type==='bleed') text="BLEEDING";
+            if(type==='burn') text="BURNING";
+            if(type==='slow_short') text="SLOWED";
+            if(type==='grounded') text="GROUNDED";
+            if(type==='defense_up') text="DEFENSE UP";
+            if(type==='vulnerable') text="EXPOSED";
+            if(type==='fate_link') text="FATE LINKED";
+            if(type==='high_gravity') text="HIGH GRAVITY";
+            if(type==='anti_gravity') text="ZERO GRAVITY";
+            floatingTexts.push(new FloatingText(this.x, this.y-50, text, 'white'));
+        }
+    }
+
+    spawnRemnant() { effects.push(new Remnant(this.id, this.x, this.y, this.facingRight)); }
+    dodge() { 
+        if(this.cooldowns[3]>0 || (this.buffs.find(b=>b.type==='grounded'))) return; 
+        this.vx = (this.facingRight?1:-1)*15; this.cooldowns[3]=60; this.invincible=20; 
+        this.dodgeTimer = 15; 
+        
+        if (this.data.id === 'zero') {
+            this.x += (this.facingRight?1:-1)*100;
+            createExplosion(this.x, this.y, '#0f0', 10);
+        }
+
+        updateCd(this.id, 'dodge', 60); 
+    }
+    
+    takeDamage(n, sourcePlayer, type='hit') {
+        // --- Host Authority Logic ---
+        // 在聯機模式下，只有房主(Host)可以計算傷害。
+        // 客戶端(Client)不進行傷害計算，只等待主機同步血量。
+        if (gameMode === 'ONLINE' && !isHost) return;
+        // ----------------------------
+
+        if(this.invincible>0 || globalRule === 'silence') return; 
+        
+        if (this.data.id === 'zero' && this.lagMode && Math.random() < 0.5) {
+            floatingTexts.push(new FloatingText(this.x, this.y-60, "LAG MISS", "#0f0"));
+            return;
+        }
+
+        if (this.dodgeTimer > 0 && type !== 'dot') {
+            this.invincible = 60; 
+            floatingTexts.push(new FloatingText(this.x, this.y-80, "PERFECT DODGE!", "#ffd700"));
+            createExplosion(this.x, this.y, '#ffd700', 20);
+            timeScale = 0.2; 
+            setTimeout(() => timeScale = 1.0, 1000); 
+            return;
+        }
+
+        if (this.buffs.find(b => b.type === 'defense_up')) n *= (this.data.id === 'lingxiao' ? 0.7 : 0.5);
+        if (this.buffs.find(b => b.type === 'vulnerable')) n *= 1.3;
+        const shat = this.buffs.find(b => b.type === 'shatter');
+        if (shat) n *= (1 + shat.stacks * 0.2); 
+
+        if (sourcePlayer && sourcePlayer.buffs.find(b => b.type === 'weak')) n *= 0.7;
+        if (sourcePlayer && sourcePlayer.data.id === 'lingxiao') n *= (1 + sourcePlayer.xiangangStacks * 0.02);
+        if (sourcePlayer && sourcePlayer.data.id === 'ember' && sourcePlayer.energy > 75) n *= 1.5; 
+        if (sourcePlayer && sourcePlayer.data.id === 'teslam' && sourcePlayer.ascensionLevel > 0) n *= (1 + sourcePlayer.ascensionLevel * 0.05);
+
+        if (this.data.id === 'ohm' && this.isAbsorbing && n > 0) {
+            if(this.ohmStorage < 3) { 
+                this.ohmStorage++; 
+                createExplosion(this.x, this.y-30, '#00ffff', 10); 
+                floatingTexts.push(new FloatingText(this.x, this.y-50, "⚡ CHARGE!", "#00ffff"));
+            } 
+            return;
+        }
+
+        if (this.data.id === 'graviton') {
+            this.energy = Math.min(100, this.energy + 10); 
+        }
+
+        if (this.data.id === 'khaos' && this.causalLink > 0 && sourcePlayer) { 
+            sourcePlayer.takeDamage(n, null, 'reflect'); 
+            createExplosion(this.x, this.y-30, 'red', 5); 
+            floatingTexts.push(new FloatingText(this.x, this.y-60, "REFLECT!", "red"));
+            return; 
+        }
+        
+        if (sourcePlayer && sourcePlayer.data.id === 'khaos' && sourcePlayer.causalLink > 0) sourcePlayer.heal(n);
+        if (globalRule === 'fragile') { n *= 2; floatingTexts.push(new FloatingText(this.x, this.y-40, "CRIT!", "orange")); }
+        
+        if (type !== 'swap') {
+            const paradox = effects.find(e => e instanceof Trap && e.type === 'khaos_field');
+            if (paradox && paradox.subType === 'effect' && Math.abs(this.x - paradox.x) < 150) { 
+                this.heal(n, 'swap'); 
+                return; 
+            }
+        }
+
+        if(this.buffs.find(b=>b.type==='counter') && sourcePlayer) { sourcePlayer.takeDamage(n, this, 'reflect'); this.buffs=[]; return; }
+
+        if (type !== 'shared' && this.buffs.find(b => b.type === 'fate_link')) {
+             const other = players.find(p => p.id !== this.id);
+             if (other) other.takeDamage(n, sourcePlayer, 'shared');
+        }
+
+        if (n > 15) shakeScreen(); 
+
+        this.hp -= n; 
+        if (sourcePlayer) sourcePlayer.addCombo();
+        
+        const hpText = this.data.id === 'samsara' ? "LOAD: " : "HP: ";
+        floatingTexts.push(new FloatingText(this.x, this.y-30, "-" + Math.floor(n) + " | " + hpText + Math.floor(this.hp), "red"));
+
+        if(this.hp<=0) {
+            timeScale = 0.1;
+            createExplosion(this.x, this.y, 'red', 100);
+            setTimeout(() => { timeScale = 1.0; endGame(this.id==='p1'?'P2':'P1'); }, 1500);
+        }
+        updateHp(); createExplosion(this.x,this.y-30,'red',5);
+    }
+
+    heal(n, type='normal') { 
+        if(globalRule === 'silence') return;
+        if (type !== 'swap') {
+            const paradox = effects.find(e => e instanceof Trap && e.type === 'khaos_field');
+            if (paradox && paradox.subType === 'effect' && Math.abs(this.x - paradox.x) < 150) { this.takeDamage(n, null, 'swap'); return; }
+        }
+        
+        if (this.data.id === 'samsara' && this.buffs.find(b => b.type === 'fate_link') && this.hp + n >= 90) {
+             const enemy = players.find(p => p.id !== this.id);
+             if (enemy) {
+                 enemy.takeDamage(30, this);
+                 createExplosion(enemy.x, enemy.y, 'white', 50);
+                 floatingTexts.push(new FloatingText(enemy.x, enemy.y-60, "FATE OVERLOAD!", "white"));
+             }
+        }
+
+        this.hp = Math.min(this.hp+n, this.maxHp); 
+        updateHp(); 
+        createExplosion(this.x,this.y-30,'lime',5);
+        const hpText = this.data.id === 'samsara' ? "LOAD: " : "HP: ";
+        floatingTexts.push(new FloatingText(this.x, this.y-30, "+" + Math.floor(n) + " | " + hpText + Math.floor(this.hp), "lime"));
+    }
+    
+    stun(t) { 
+        if (this.data.id === 'graviton' && this.energy >= 100) {
+            floatingTexts.push(new FloatingText(this.x, this.y-50, "RESIST!", "#4b0082"));
+            return; 
+        }
+        this.stunTimer = t; floatingTexts.push(new FloatingText(this.x, this.y-50, "STUNNED", "yellow")); 
+    }
+
+    useSkill(idx) {
+        if(this.cooldowns[idx]>0 || this.stunTimer>0 || this.isAbsorbing) return;
+        if(globalRule === 'silence' && idx !== 3) return; 
+        
+        if (this.data.id === 'ember') {
+            if (this.exhaustionTimer > 0) return; 
+            if (idx === 0 && this.energy < 20 && !this.emberPulseActive) return;
+            if (idx === 2 && this.energy < 30) return;
+        }
+        
+        if (this.data.id === 'teslam') {
+            if (idx === 2 && this.energy < 100 && !this.thorMode) return; 
+        }
+
+        if (this.data.id === 'lingxiao') {
+            if (this.danyuan <= 0) return;
+            this.danyuan--;
+            const slot = this.danyuanTimers.findIndex(t => t <= 0);
+            if (slot !== -1) this.danyuanTimers[slot] = 180; 
+            else this.danyuanTimers[2] = 180; 
+            this.lingRecentUsage.push(Date.now());
+            this.lingRecentUsage = this.lingRecentUsage.filter(t => Date.now() - t < 3000);
+            if (this.lingRecentUsage.length >= 2) { 
+                this.stasisTimer = 120; floatingTexts.push(new FloatingText(this.x, this.y-60, "STASIS", "gray"));
+            }
+        }
+
+        const s = this.data.skills[idx];
+        let cd = s.cd;
+        if (gameMode === 'TRAINING') cd = 60; 
+
+        if (this.data.id === 'teslam' && this.thorMode) {
+            if (idx === 0) cd = 30; 
+            if (idx === 1) cd = 120; 
+        }
+        
+        if (this.data.id === 'graviton' && s.type === 'gravity_shift') {
+            cd = 300 + 360; 
+        }
+
+        this.cooldowns[idx] = cd; updateCd(this.id, idx, cd);
+        
+        if (idx === 2) showUltAnim(s.name);
+
+        const enemy = players.find(p=>p.id!==this.id);
+        if(enemy) this.facingRight = enemy.x > this.x; 
+        const dir = this.facingRight ? 1 : -1;
+
+        if (this.data.id === 'teslam') this.addLoad(18);
+        if (this.data.id === 'sera' && idx !== 2) this.lastSkill = s.type; 
+
+        switch(s.type) {
+            case 'graviton_pull':
+                if (enemy) {
+                    enemy.vx = (this.x - enemy.x) * 0.15; 
+                    enemy.vy = -5;
+                    enemy.applyStatus('grounded', 60);
+                    setTimeout(() => { 
+                        if(getDist(this.x, this.y, enemy.x, enemy.y) < 50) {
+                            enemy.takeDamage(15, this); 
+                            if (this.buffs.find(b=>b.type==='anti_gravity')) {
+                                enemy.vx = dir * 30;
+                                createExplosion(enemy.x, enemy.y, '#4b0082', 20);
+                            }
+                        }
+                    }, 300);
+                    effects.push(new Beam(this.id, this.x, this.y-30, dir, 0, 20, true, 'gravity_beam', enemy));
+                }
+                break;
+            case 'gravity_shift':
+                effects.push(new Trap(this.id, this.x, GROUND_Y, 0, 300, 'gravity_zone'));
+                createExplosion(this.x, this.y, '#4b0082', 50);
+                floatingTexts.push(new FloatingText(this.x, this.y-80, "GRAVITY FIELD!", "#4b0082"));
+                break;
+            case 'graviton_blackhole':
+                effects.push(new Summon(this.id, canvas.width/2, canvas.height/2 - 100, 'blackhole'));
+                break;
+
+            case 'time_dagger':
+                projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*15, 0, {type:'time_dagger', damage:12, color:'#b8860b'}));
+                break;
+            case 'time_rewind':
+                if (this.history.length > 0) {
+                    const state = this.history[0]; 
+                    this.x = state.x; this.y = state.y;
+                    const hpLost = state.hp - this.hp;
+                    if (hpLost > 0) this.heal(hpLost * 0.5);
+                    createExplosion(this.x, this.y, '#b8860b', 50);
+                    floatingTexts.push(new FloatingText(this.x, this.y-60, "PARADOX!", "#b8860b"));
+                    if (enemy && getDist(this.x, this.y, enemy.x, enemy.y) < 150) {
+                        enemy.takeDamage(25, this);
+                        enemy.vx = (enemy.x > this.x ? 1 : -1) * 20; 
+                    }
+                }
+                break;
+            case 'time_stop':
+                this.timeStopActive = 120; 
+                shakeScreen();
+                floatingTexts.push(new FloatingText(canvas.width/2, canvas.height/2, "ZA WARUDO!", "#b8860b"));
+                break;
+
+            case 'zero_bug':
+                const r = Math.random();
+                let effect = 'damage';
+                if (r < 0.33) effect = 'stun';
+                else if (r < 0.66) effect = 'knockup';
+                projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*15, 0, {type:'glitch_block', damage:15, color:'#0f0', effect: effect}));
+                break;
+            case 'zero_lag':
+                this.lagMode = true;
+                floatingTexts.push(new FloatingText(this.x, this.y-60, "LAG SWITCH ON", "#0f0"));
+                setTimeout(() => this.lagMode = false, 1800); 
+                break;
+            case 'zero_crash':
+                startGlobalRule('chaos', 120); 
+                if (enemy) enemy.takeDamage(40, this, 'true_dmg'); 
+                shakeScreen();
+                break;
+
+            case 'teslam_chain':
+                if (enemy) {
+                    effects.push(new Beam(this.id, this.x, this.y-30, dir, 0, 10, true, 'chain_lightning', enemy));
+                    let dmg = 10 + (this.ascensionLevel * 2);
+                    enemy.takeDamage(dmg, this);
+                    if (this.ascensionLevel >= 2) {
+                        effects.push(new Trap(this.id, enemy.x, GROUND_Y, 5, 120, 'electric_arc'));
+                    }
+                    if (this.ascensionLevel >= 3 && enemy.buffs.length > 0) {
+                        enemy.buffs.pop();
+                        floatingTexts.push(new FloatingText(enemy.x, enemy.y-60, "DISPEL", "#00ccff"));
+                    }
+                }
+                break;
+            case 'teslam_wall':
+                if (this.thorMode) {
+                    effects.push(new Trap(this.id, this.x + dir*150, GROUND_Y, 20, 30, 'thor_thunder'));
+                } else {
+                    const wallX = enemy ? (this.x + (enemy.x - this.x)/2) : this.x + dir*100;
+                    effects.push(new Trap(this.id, wallX, GROUND_Y, 10, 180, 'electric_wall', '', this.ascensionLevel));
+                }
+                break;
+            case 'teslam_ult':
+                this.thorMode = true;
+                this.thorTimer = 420; 
+                createExplosion(this.x, this.y, '#00ccff', 50);
+                floatingTexts.push(new FloatingText(this.x, this.y-80, "THOR MODE!", "#00ccff"));
+                break;
+
+            case 'void_swap':
+                const remnants = effects.filter(e => e instanceof Remnant && e.oid === this.id);
+                if (remnants.length > 0) {
+                    let target = remnants[0];
+                    let maxD = 0;
+                    remnants.forEach(r => {
+                        const d = getDist(this.x, this.y, r.x, r.y);
+                        if (d > maxD) { maxD = d; target = r; }
+                    });
+                    const tx = this.x; const ty = this.y;
+                    this.x = target.x; this.y = target.y;
+                    target.x = tx; target.y = ty;
+                    createExplosion(this.x, this.y, '#bd00ff', 20);
+                } else {
+                    this.spawnRemnant();
+                    this.x += dir * 150; 
+                }
+                break;
+            case 'void_beam':
+                effects.push(new Beam(this.id, this.x + dir*20, this.y-30, dir, 14, 15));
+                break;
+            case 'void_echo':
+                if (this.lastSkill === 'void_beam') {
+                    effects.filter(e => e instanceof Remnant && e.oid === this.id).forEach(r => r.mimic('void_beam'));
+                } else if (this.lastSkill === 'void_swap') {
+                    effects.filter(e => e instanceof Remnant && e.oid === this.id).forEach(r => {
+                        createExplosion(r.x, r.y, '#bd00ff', 30);
+                        if (enemy && getDist(r.x, r.y, enemy.x, enemy.y) < 60) enemy.takeDamage(20, this);
+                        r.marked = true;
+                    });
+                }
+                break;
+
+            case 'dash_dmg':
+                this.vx = dir * 25; 
+                this.invincible = 15; 
+                setTimeout(() => { if(enemy && getDist(this.x, this.y, enemy.x, enemy.y) < 100) enemy.takeDamage(s.damage, this); }, 100);
+                break;
+            case 'aoe_self':
+                createExplosion(this.x, this.y-30, this.color, 20);
+                if (enemy && getDist(this.x, this.y, enemy.x, enemy.y) < s.radius) {
+                    enemy.takeDamage(s.damage, this);
+                    if(this.data.id==='blade') enemy.applyStatus('vulnerable', 240);
+                    if(this.data.id==='gale') { enemy.vy = -15; enemy.stun(30); } 
+                }
+                break;
+            case 'buff':
+                this.buffs.push({type: s.buffType, timer: s.duration});
+                floatingTexts.push(new FloatingText(this.x, this.y-60, "BUFF UP", "white"));
+                break;
+            case 'proj_multi':
+                [-2, -1, 0, 1, 2].forEach(d => projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*10, d, {damage:s.damage, color:this.color})));
+                break;
+            case 'trap':
+                const t = new Trap(this.id, this.x, GROUND_Y, s.damage, s.duration, 'trap');
+                if(this.data.id==='archer') t.applyBleed = true;
+                effects.push(t);
+                break;
+            case 'evade_shot':
+                this.vx = -dir * 15; this.vy = -8;
+                projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*15, 0, {damage:s.damage, color:this.color}));
+                break;
+            case 'proj_heavy':
+                projectiles.push(new Projectile(this.id, this.x, this.y-40, dir*10, -8, {type:'proj_heavy', damage:s.damage, color:this.color, gravity:true, heavy:true}));
+                break;
+            case 'heal':
+                this.heal(s.amount);
+                if (this.data.id === 'paladin') this.applyStatus('defense_up', 180);
+                break;
+            case 'aoe_ground':
+                if (enemy) {
+                    effects.push(new Trap(this.id, enemy.x, GROUND_Y, s.damage, 10, 'instant'));
+                    if (this.data.id === 'paladin') enemy.applyStatus('weak', 300);
+                    if (this.data.id === 'titan') { enemy.stun(40); shakeScreen(); }
+                } else {
+                    effects.push(new Trap(this.id, this.x + dir * 100, GROUND_Y, s.damage, 10, 'instant'));
+                }
+                createExplosion(this.x, GROUND_Y, 'gold', 30);
+                break;
+            case 'proj_bomb':
+                projectiles.push(new Projectile(this.id, this.x, this.y-40, dir*10, -8, {type:'proj_bomb', damage:s.damage, color:this.color, gravity:true}));
+                break;
+            case 'jump_atk':
+                this.vy = -18; this.vx = dir * 8;
+                setTimeout(()=>effects.push(new Trap(this.id, this.x, GROUND_Y, s.damage, 10, 'instant')), 600);
+                break;
+            case 'summon_drone':
+                effects.push(new Summon(this.id, this.x, this.y-50, 'drone'));
+                break;
+            case 'proj_homing':
+                projectiles.push(new Projectile(this.id, this.x, this.y-40, dir*8, 0, {type:'proj_homing', damage:s.damage, color:this.color}));
+                break;
+            case 'summon':
+                effects.push(new Summon(this.id, this.x+dir*50, this.y-20, 'skeleton'));
+                break;
+            case 'drain':
+                if(enemy && getDist(this.x, this.y, enemy.x, enemy.y) < s.range) {
+                    enemy.takeDamage(s.damage, this); this.heal(s.damage);
+                    createExplosion(enemy.x, enemy.y, 'purple', 10);
+                }
+                break;
+            case 'proj_fast':
+                projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*20, 0, {damage:s.damage, color:this.color}));
+                setTimeout(()=>projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*20, 0, {damage:s.damage, color:this.color})), 100); 
+                break;
+            case 'clone':
+                effects.push(new Summon(this.id, this.x, this.y, 'clone'));
+                this.x += dir * 150;
+                break;
+            case 'teleport_back':
+                if (enemy) {
+                    this.x = enemy.x - (enemy.facingRight ? 50 : -50);
+                    this.y = enemy.y;
+                    enemy.takeDamage(s.damage, this);
+                    floatingTexts.push(new FloatingText(this.x, this.y-50, "CRIT!", "red"));
+                }
+                break;
+
+            case 'samsara_q':
+                let sdmg = 20; 
+                if (this.hp > 50) { sdmg += (this.hp - 50) * 1.2; this.hp = 50; updateHp(); } 
+                projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*15, 0, {type:'proj_homing', damage:sdmg, color:'white'}));
+                shakeScreen();
+                break;
+            case 'samsara_w':
+                let cleansed = this.buffs.length > 0 || this.stunTimer > 0;
+                this.buffs = []; this.stunTimer = 0;
+                if (enemy) enemy.buffs = []; 
+                createExplosion(this.x, this.y, 'cyan', 50);
+                if (cleansed) this.heal(25); 
+                break;
+            case 'samsara_e':
+                if (enemy) {
+                    this.buffs.push({type: 'fate_link', timer: 300});
+                    enemy.buffs.push({type: 'fate_link', timer: 300});
+                    floatingTexts.push(new FloatingText(this.x, this.y-60, "FATE LINKED", "white"));
+                }
+                break;
+
+            case 'ling_q':
+                setTimeout(() => { effects.push(new Trap(this.id, enemy ? enemy.x : this.x + dir*150, GROUND_Y, 15, 10, 'ling_star')); }, 400); 
+                break;
+            case 'ling_w':
+                this.buffs.push({type: 'defense_up', timer: 240});
+                this.buffs.push({type: 'ling_regen', timer: 240});
+                break;
+            case 'ling_e':
+                projectiles.push(new Projectile(this.id, this.x, this.y-40, dir*12, 0, {type:'ling_bind', damage:5, color:'#e6e6fa'}));
+                break;
+
+            case 'ember_pulse':
+                const pulse = projectiles.find(p => p.oid === this.id && p.cfg.isPulse);
+                if (pulse) {
+                    pulse.marked = true; createExplosion(pulse.x, pulse.y, 'orange', 50);
+                    if (enemy && getDist(pulse.x, pulse.y, enemy.x, enemy.y) < 120) {
+                        let edmg = 25; if (this.energy > 75) edmg *= 2; 
+                        enemy.takeDamage(edmg, this); enemy.stun(30);
+                    }
+                    this.emberPulseActive = false; shakeScreen();
+                } else if (this.energy >= 20) {
+                    this.energy -= 20;
+                    projectiles.push(new Projectile(this.id, this.x, this.y-30, dir*8, 0, {type:'ember_pulse', damage:15, color:'orange', isPulse:true}));
+                    this.emberPulseActive = true;
+                    this.cooldowns[idx] = 0; updateCd(this.id, idx, 0);
+                }
+                break;
+            case 'ember_overload_buff':
+                this.buffs.push({type: 'overload', timer: 240});
+                effects.push(new ChaosDice(this, Math.floor(this.energy), "SHIELD"));
+                setTimeout(() => { this.exhaustionTimer = 180; floatingTexts.push(new FloatingText(this.x, this.y-60, "EXHAUSTED", "gray")); }, 4000);
+                break;
+            case 'ember_singularity':
+                this.energy -= 30;
+                effects.push(new Summon(this.id, this.x + dir * 200, this.y-50, 'singularity'));
+                break;
+
+            case 'khaos_link':
+                this.causalLink = 300; 
+                floatingTexts.push(new FloatingText(this.x, this.y-80, "LINKED!", "red"));
+                break;
+            case 'khaos_field':
+                effects.push(new Trap(this.id, this.x, GROUND_Y, 0, 150, 'khaos_field', 'cause')); 
+                break;
+            case 'khaos_ult':
+                startGlobalRule('silence', 300); 
+                startGlobalRule('fragile', 300);
+                shakeScreen();
+                break;
+
+            case 'ohm_absorb':
+                this.isAbsorbing = true; floatingTexts.push(new FloatingText(this.x, this.y-60, "SHIELD", "#00ffff")); setTimeout(()=>this.isAbsorbing=false, 1500);
+                break;
+            case 'ohm_release':
+                let odmg = 10 + (this.ohmStorage * 15);
+                projectiles.push(new Projectile(this.id, this.x, this.y-40, dir*12, 0, {type:'proj_homing', damage:odmg, color:'#00ffff', heavy:true}));
+                if(this.ohmStorage>0) this.ohmStorage--;
+                break;
+            case 'ohm_overload':
+                createExplosion(this.x, this.y, '#00ffff', 80); shakeScreen();
+                if (enemy && getDist(this.x, this.y, enemy.x, enemy.y)<250) {
+                    let odmg = this.ohmStorage * 30; if(this.ohmStorage === 3) odmg = enemy.hp * 0.5;
+                    enemy.takeDamage(Math.max(20, odmg), this); enemy.stun(40);
+                }
+                this.ohmStorage = 0;
+                break;
+        }
+    }
+}
+
+// --- Projectiles & Effects ---
+class Projectile extends GameObject {
+    constructor(oid,x,y,vx,vy,cfg){super(x,y,cfg.color);this.oid=oid;this.vx=vx;this.vy=vy;this.cfg=cfg;this.timer=0;}
+    update() {
+        const t = players.find(p=>p.id!==this.oid);
+        const owner = players.find(p=>p.id===this.oid);
+        
+        if (t && t.timeStopActive && this.oid === t.id) { }
+        else if (t && t.timeStopActive) return; 
+
+        if (t && t.data.id === 'chronos' && getDist(this.x, this.y, t.x, t.y) < 150) {
+            this.x += this.vx * 0.5 * timeScale; this.y += this.vy * 0.5 * timeScale;
+        } else {
+            this.timer += 1 * timeScale; this.x+=this.vx * timeScale; this.y+=this.vy * timeScale;
+        }
+
+        const otherProj = projectiles.find(p => p.oid !== this.oid && !p.marked && getDist(this.x, this.y, p.x, p.y) < 20);
+        if (otherProj) {
+            if (this.cfg.heavy && !otherProj.cfg.heavy) {
+                otherProj.marked = true;
+                createExplosion(this.x, this.y, 'white', 5);
+                return;
+            }
+            if (this.cfg.heavy === otherProj.cfg.heavy) {
+                this.marked = true; otherProj.marked = true;
+                createExplosion(this.x, this.y, 'white', 10);
+                floatingTexts.push(new FloatingText(this.x, this.y-20, "CLASH!", "white"));
+                return;
+            }
+        }
+
+        if(this.cfg.life && this.timer > this.cfg.life) this.marked = true; 
+        if(this.cfg.gravity) this.vy += 0.5 * timeScale;
+        if(this.cfg.type==='proj_homing'){ if(t){ this.vx+=(t.x>this.x?0.5:-0.5)*timeScale; this.vy+=(t.y-40>this.y?0.5:-0.5)*timeScale; } }
+        
+        if(this.y>GROUND_Y || this.x<-100 || this.x>canvas.width+100) this.marked=true;
+        
+        if (this.cfg.type==='ling_bind' && this.y>=GROUND_Y) {
+            this.marked=true; effects.push(new Trap(this.oid, this.x, GROUND_Y, 0, 150, 'ling_bind')); createExplosion(this.x, this.y, '#e6e6fa'); return;
+        }
+
+        if(!this.marked && t && Math.abs(t.x-this.x)<20 && Math.abs(t.y-30-this.y)<30) { 
+            t.takeDamage(this.cfg.damage, players.find(p=>p.id===this.oid)); 
+            this.marked=true; 
+            if(this.cfg.type==='proj_bomb' && t) t.applyStatus('burn', 180);
+            if(this.oid==='assassin' && this.cfg.damage===8) t.applyStatus('slow_short', 120); 
+            if(this.cfg.type==='time_dagger') t.applyStatus('slow_short', 180);
+            
+            if (this.cfg.type === 'glitch_block') {
+                if (this.cfg.effect === 'stun') t.stun(40);
+                if (this.cfg.effect === 'knockup') t.vy = -15;
+            }
+        }
+    }
+    draw(ctx) { 
+        ctx.fillStyle=this.color; 
+        if (this.cfg.type === 'sword_wave') {
+            ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(Math.atan2(this.vy, this.vx)); ctx.beginPath(); ctx.moveTo(-10, -20); ctx.quadraticCurveTo(10, 0, -10, 20); ctx.strokeStyle = this.color; ctx.lineWidth=3; ctx.stroke(); ctx.restore();
+        } else if (this.cfg.type === 'glitch_block') {
+            ctx.fillRect(this.x-5, this.y-5, 10 + Math.random()*5, 10 + Math.random()*5);
+        } else { ctx.beginPath(); ctx.arc(this.x,this.y,6,0,7); ctx.fill(); }
+    }
+}
+
+class Trap extends GameObject {
+    constructor(oid,x,y,dmg,dur,type='trap', subType='', level=0){super(x,y,type==='khaos_field'?'rgba(200,0,255,0.2)':'#9f3');this.oid=oid;this.dmg=dmg;this.life=dur;this.type=type;this.subType=subType; this.applyBleed=false; this.level=level; this.timer=0;}
+    update() {
+        this.life -= 1 * timeScale; this.timer += 1 * timeScale; if(this.life<=0) this.marked=true;
+        if(this.type==='khaos_field') return; 
+        
+        if (this.type==='electric_wall') {
+            if (this.level >= 3) {
+                const p = players.find(pl => pl.id === this.oid);
+                this.x += (p.facingRight ? 0.5 : -0.5) * timeScale;
+            }
+            if (this.level >= 2 && Math.floor(this.timer) % 75 === 0) {
+                projectiles.push(new Projectile(this.oid, this.x, this.y-30, 5, 0, {type:'basic', damage:5, color:'#00ccff'}));
+                projectiles.push(new Projectile(this.oid, this.x, this.y-30, -5, 0, {type:'basic', damage:5, color:'#00ccff'}));
+            }
+        }
+
+        if(this.type==='ling_star' && Math.floor(this.life)===5) { 
+             createExplosion(this.x, this.y, '#e6e6fa', 30);
+             const t = players.find(p=>p.id!==this.oid);
+             if(t && Math.abs(t.x-this.x)<60) { t.takeDamage(this.dmg, players.find(p=>p.id===this.oid)); t.applyStatus('shatter', 240); }
+        }
+
+        if(this.type==='thor_thunder' && Math.floor(this.life)===5) {
+             createExplosion(this.x, this.y, '#00ccff', 60);
+             const t = players.find(p=>p.id!==this.oid);
+             if(t && Math.abs(t.x-this.x)<100) { t.takeDamage(this.dmg, players.find(p=>p.id===this.oid)); t.stun(24); }
+        }
+        
+        if(this.type==='gravity_zone') {
+            const t = players.find(p=>p.id!==this.oid);
+            const owner = players.find(p=>p.id===this.oid);
+            if(t && Math.abs(t.x-this.x)<150) t.applyStatus('high_gravity', 10);
+            if(owner && Math.abs(owner.x-this.x)<150) owner.applyStatus('anti_gravity', 10);
+        }
+
+        const t = players.find(p=>p.id!==this.oid);
+        if(t && Math.abs(t.x-this.x)<25 && t.y>=GROUND_Y-5) { 
+            if (this.type==='trap' || this.type==='instant') {
+                t.takeDamage(this.dmg, players.find(p=>p.id===this.oid)); this.marked=true; 
+                if(this.type==='trap') t.stun(60); if(this.applyBleed) t.applyStatus('bleed', 300);
+            }
+            if (this.type==='ling_bind') { t.applyStatus('grounded', 20); t.vx *= 0.5; }
+            if (this.type==='electric_arc') { t.applyStatus('electric_arc', 10); }
+            if (this.type==='electric_wall') { t.takeDamage(1, players.find(p=>p.id===this.oid)); t.vx *= 0.8; }
+        }
+    }
+    draw(ctx) { 
+        if(this.type==='khaos_field') { ctx.fillStyle=this.color; ctx.fillRect(this.x-150, this.y-200, 300, 200); ctx.strokeStyle='#fff'; ctx.strokeRect(this.x-150, this.y-200, 300, 200); }
+        else if (this.type==='ling_star') { ctx.fillStyle = `rgba(230, 230, 250, ${this.life/10})`; ctx.beginPath(); ctx.arc(this.x, this.y, 60, 0, Math.PI*2); ctx.fill(); }
+        else if (this.type==='thor_thunder') { ctx.fillStyle = `rgba(0, 204, 255, 0.5)`; ctx.fillRect(this.x-80, this.y-300, 160, 300); }
+        else if (this.type==='gravity_zone') { 
+            ctx.fillStyle = `rgba(75, 0, 130, 0.3)`; 
+            ctx.beginPath(); ctx.arc(this.x, this.y-50, 150, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = '#4b0082'; ctx.lineWidth = 2; ctx.stroke();
+            const r = (Date.now() % 1000) / 1000 * 150;
+            ctx.beginPath(); ctx.arc(this.x, this.y-50, r, 0, Math.PI*2); ctx.stroke();
+        }
+        else if (this.type==='electric_wall') { 
+            ctx.fillStyle = `rgba(0, 204, 255, 0.4)`; 
+            let w = 20 + (this.level * 10);
+            ctx.fillRect(this.x-w, this.y-80, w*2, 80); 
+        }
+        else if (this.type==='electric_arc') { ctx.strokeStyle='#00ccff'; ctx.beginPath(); ctx.arc(this.x, this.y, 20, 0, Math.PI, true); ctx.stroke(); }
+        else if (this.type==='ling_bind') { ctx.fillStyle = `rgba(100, 100, 255, 0.3)`; ctx.fillRect(this.x-30, this.y-10, 60, 10); }
+        else { ctx.strokeStyle=this.color; ctx.strokeRect(this.x-10,this.y-5,20,5); }
+    }
+}
+
+class Summon extends GameObject {
+    constructor(oid,x,y,type){super(x,y,'#fff');this.oid=oid;this.type=type;this.life=600;this.vx=0;this.vy=0; 
+        if(type==='clone') this.life = 180;
+        if(type==='blackhole') this.life = 300;
+    }
+    update() {
+        this.life -= 1 * timeScale; if(this.life<=0) this.marked=true;
+        const t = players.find(p=>p.id!==this.oid);
+        const owner = players.find(p=>p.id===this.oid);
+        
+        if(this.type==='singularity' || this.type==='blackhole') {
+            if(t) { 
+                const dist = getDist(this.x, this.y, t.x, t.y); 
+                if(dist < 300 && dist > 10) { 
+                    t.x += (this.x - t.x) * 0.05 * timeScale; 
+                    t.y += (this.y - t.y) * 0.05 * timeScale; 
+                    if (this.type === 'blackhole' && Math.floor(this.life)%10===0) t.takeDamage(2, owner);
+                } 
+            }
+            if(owner && owner.data.id === 'ember' && owner.energy < 100 && Math.floor(this.life)%20===0) owner.energy+=1; 
+        }
+        else if(this.type==='drone'){
+            if(t) { this.x += (t.x - this.x) * 0.03 * timeScale; this.y += (t.y - 40 - this.y) * 0.03 * timeScale; }
+            if(t && Math.abs(t.x-this.x)<20 && Math.abs(t.y-40-this.y)<20) { t.takeDamage(45); this.marked=true; createExplosion(this.x,this.y,'red'); }
+        }
+        else if(this.type==='skeleton') {
+             this.vy+=0.5 * timeScale; this.y+=this.vy * timeScale; if(this.y>=GROUND_Y) { this.y=GROUND_Y; this.vy=0; this.vx=(t&&t.x>this.x?1:-1); } this.x+=this.vx * timeScale; if(t&&Math.abs(t.x-this.x)<30) { t.takeDamage(2); this.marked=true; }
+        }
+    }
+    draw(ctx) { 
+        ctx.fillStyle = this.type==='singularity'?'black':(this.type==='drone'?'orange':'white');
+        if(this.type==='clone') ctx.fillStyle = '#cccccc';
+        if(this.type==='blackhole') { ctx.fillStyle = '#220022'; ctx.beginPath(); ctx.arc(this.x, this.y, 20 + Math.random()*5, 0, Math.PI*2); ctx.fill(); ctx.strokeStyle = 'purple'; ctx.stroke(); return; }
+        ctx.beginPath(); ctx.arc(this.x,this.y,10,0,7); ctx.fill(); 
+        if(this.type==='singularity') { ctx.strokeStyle='purple'; ctx.stroke(); }
+        ctx.fillStyle='white'; ctx.font='10px Arial'; ctx.fillText(this.type, this.x-10, this.y-15);
+    }
+}
+
+class Remnant extends GameObject { 
+    constructor(o,x,y,f){super(x,y,'#bd00ff');this.oid=o;this.f=f;this.life=300;} 
+    update(){this.life -= 1 * timeScale;if(this.life<=0)this.marked=true;} 
+    draw(ctx){ctx.globalAlpha=0.5;ctx.fillStyle=this.color;ctx.fillRect(this.x-5,this.y-50,10,50);ctx.globalAlpha=1;} 
+    mimic(t){ 
+        if(t==='void_beam') effects.push(new Beam(this.oid, this.x, this.y-30, this.f?1:-1, 25, 15)); 
+    } 
+}
+
+class Beam extends GameObject { 
+    constructor(o,x,y,d,dmg,dur, isVisual=false, type='beam', target=null){super(x,y,'#bd00ff');this.oid=o;this.d=d;this.dmg=dmg;this.life=dur;this.hit=false; this.isVisual=isVisual; this.type=type; this.target=target;} 
+    update(){
+        this.life -= 1 * timeScale;if(this.life<=0)this.marked=true; 
+        if(!this.hit && !this.isVisual){
+            const t=players.find(p=>p.id!==this.oid); 
+            if(t){
+                const min=this.d>0?this.x:this.x-1000; const max=this.d>0?this.x+1000:this.x; 
+                if(t.x>min && t.x<max && Math.abs(t.y-30-this.y)<40){t.takeDamage(this.dmg, players.find(p=>p.id===this.oid));this.hit=true;}
+            }
+        }
+    } 
+    draw(ctx){
+        if (this.type === 'chain_lightning' && this.target) {
+            ctx.strokeStyle = '#00ccff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(this.x, this.y);
+            let cx = this.x, cy = this.y;
+            const tx = this.target.x, ty = this.target.y - 30;
+            const steps = 5;
+            for(let i=1; i<=steps; i++) {
+                const nx = this.x + (tx - this.x) * (i/steps);
+                const ny = this.y + (ty - this.y) * (i/steps);
+                ctx.lineTo(nx + (Math.random()-0.5)*20, ny + (Math.random()-0.5)*20);
+            }
+            ctx.stroke();
+        } else if (this.type === 'gravity_beam' && this.target) {
+            ctx.strokeStyle = '#4b0082'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(this.x, this.y); ctx.lineTo(this.target.x, this.target.y-30); ctx.stroke();
+        } else {
+            ctx.fillStyle=this.color; ctx.fillRect(this.d>0?this.x:this.x-1000,this.y-5,1000,10);
+        }
+    } 
+}
+
+class ChaosDice extends GameObject { constructor(o,v,t){super(o.x,o.y-80,'#fff');this.v=v;this.t=t;this.life=100;this.vy=-1;} update(){this.life -= 1 * timeScale;this.y+=this.vy * timeScale;if(this.life<=0)this.marked=true;} draw(ctx){ctx.fillStyle='#fff';ctx.fillText(this.v,this.x,this.y);ctx.font='10px Arial';ctx.fillText(this.t,this.x,this.y-15);} }
+class SpeechBubble extends GameObject { constructor(o,t){super(o.x,o.y-100,'#fff');this.o=o;this.t=t;this.life=150;} update(){this.life -= 1 * timeScale;if(this.o){this.x=this.o.x;this.y=this.o.y-90;}if(this.life<=0)this.marked=true;} draw(ctx){ctx.fillStyle='#fff';ctx.fillRect(this.x-40,this.y-15,80,30);ctx.fillStyle='#000';ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText(this.t,this.x,this.y+5);} }
+
+function createExplosion(x,y,c,n=5) { for(let i=0;i<n;i++) effects.push(new Particle(x,y,c,(Math.random()-0.5)*5,(Math.random()-0.5)*5,Math.random()*3,15)); }
+function getDist(x1,y1,x2,y2){ return Math.sqrt(Math.pow(x2-x1,2)+Math.pow(y2-y1,2)); }
+function shakeScreen() { shakeTimer = 15; }
+
+// --- Global Rules ---
+function startGlobalRule(rule, duration) {
+    globalRule = rule; globalRuleTimer = duration; createExplosion(canvas.width/2, canvas.height/2, 'white', 50);
+    if(rule === 'chaos') shuffleButtons();
+    let msg = ""; if(rule==='silence')msg="⛔ SILENCE!"; if(rule==='fragile')msg="💔 FRAGILE!"; if(rule==='chaos')msg="🌀 CHAOS!";
+    floatingTexts.push(new FloatingText(canvas.width/2, canvas.height/2, msg, "white", 120));
+}
+function updateGlobalRules() { if(globalRuleTimer > 0) { globalRuleTimer -= 1 * timeScale; if(globalRuleTimer <= 0) { globalRule = null; resetButtons(); } } }
+function shuffleButtons() { document.querySelectorAll('.controls-layer .touch-btn').forEach(btn => { btn.style.top = Math.random() * 80 + '%'; btn.style.left = Math.random() * 80 + '%'; }); }
+function resetButtons() { document.querySelectorAll('.controls-layer .touch-btn').forEach(btn => { btn.style.top=''; btn.style.left=''; btn.style.bottom=''; }); }
+
+// --- UI / Main ---
+function setupTouchListeners() {
+    document.querySelectorAll('.touch-btn').forEach(btn => {
+        btn.addEventListener('touchstart', e => {
+            if(btn.classList.contains('p1-chat') || btn.classList.contains('p2-chat')) return;
+            e.preventDefault(); const key = btn.dataset.key; if(!key) return; const [pid, act] = key.split('-');
+            
+            // Online Check
+            if(gameMode === 'ONLINE') {
+                if(pid !== onlineRole) return; // Can only control own character
+                inputState[pid] = inputState[pid] || {}; inputState[pid][act] = true; btn.classList.add('active');
+                if(act.startsWith('s') || act==='dodge' || act==='atk') handleAction(pid, act);
+                sendOnlineData({type:'input', key: act, state: true});
+                return;
+            }
+
+            if(gameMode !== 'PVP' && pid==='p2') return;
+            inputState[pid] = inputState[pid] || {}; inputState[pid][act] = true; btn.classList.add('active');
+            if(act.startsWith('s') || act==='dodge' || act==='atk') handleAction(pid, act);
+        }, {passive:false});
+        
+        btn.addEventListener('touchend', e => {
+            if(btn.classList.contains('p1-chat') || btn.classList.contains('p2-chat')) return;
+            e.preventDefault(); const key = btn.dataset.key; if(!key) return; const [pid, act] = key.split('-');
+            
+            // Online Check
+            if(gameMode === 'ONLINE') {
+                if(pid !== onlineRole) return;
+                if(inputState[pid]) inputState[pid][act] = false; btn.classList.remove('active');
+                sendOnlineData({type:'input', key: act, state: false});
+                return;
+            }
+
+            if(gameMode !== 'PVP' && pid==='p2') return;
+            if(inputState[pid]) inputState[pid][act] = false; btn.classList.remove('active');
+        }, {passive:false});
+    });
+}
+
+function handleAction(pid, act) {
+    if (gameState !== 'FIGHT') return;
+    const p = players.find(pl => pl.id === pid);
+    if (!p) return;
+    if (act === 'dodge') p.dodge(); else if (act === 'atk') p.basicAttack(); else if (act.startsWith('s')) p.useSkill(parseInt(act.charAt(1)));
+}
+
+function toggleMode() { 
+    if (gameMode === 'PVP') gameMode = 'PVE';
+    else if (gameMode === 'PVE') gameMode = 'TRAINING';
+    else if (gameMode === 'TRAINING') gameMode = 'ONLINE';
+    else gameMode = 'PVP';
+    
+    let txt = "模式：雙人對戰 (本地)";
+    if (gameMode === 'PVE') txt = "模式：人機對戰 (AI)";
+    if (gameMode === 'TRAINING') txt = "模式：訓練營 (無限狀態)";
+    if (gameMode === 'ONLINE') txt = "模式：線上聯機 (主機權威)";
+    
+    document.getElementById('mode-toggle').innerText = txt; 
+    
+    if (gameMode === 'ONLINE') {
+        document.getElementById('online-panel').style.display = 'block';
+        document.getElementById('confirm-btn').style.display = 'none'; // Hide lock button in online lobby
+    } else {
+        document.getElementById('online-panel').style.display = 'none';
+        document.getElementById('confirm-btn').style.display = 'block';
+        if(peer) { peer.destroy(); peer = null; document.getElementById('online-status').innerText = "已斷開"; }
+    }
+}
+
+// --- Online Logic (Host Authority) ---
+function createRoom() {
+    if(peer) peer.destroy();
+    const id = 'fight-' + Math.floor(Math.random() * 10000);
+    peer = new Peer(id);
+    document.getElementById('online-status').innerText = "正在創建房間...";
+    
+    peer.on('open', (id) => {
+        myRoomId = id;
+        isHost = true;
+        onlineRole = 'p1';
+        document.getElementById('my-room-id').value = id;
+        document.getElementById('online-status').innerText = "房間已創建！等待對手加入...";
+        document.getElementById('select-title').innerText = "你是 P1 (Host)。請選擇角色";
+    });
+
+    peer.on('connection', (c) => {
+        conn = c;
+        setupConnection();
+        document.getElementById('online-status').innerText = "對手已連接！";
+    });
+}
+
+function joinRoom() {
+    const targetId = document.getElementById('join-room-id').value;
+    if(!targetId) return alert("請輸入房間號");
+    
+    if(peer) peer.destroy();
+    peer = new Peer();
+    document.getElementById('online-status').innerText = "正在連接...";
+    
+    peer.on('open', () => {
+        conn = peer.connect(targetId);
+        isHost = false;
+        onlineRole = 'p2';
+        setupConnection();
+    });
+}
+
+function setupConnection() {
+    conn.on('open', () => {
+        document.getElementById('online-status').innerText = "聯機成功！";
+        document.getElementById('online-status').style.color = "#00ff00";
+        if(!isHost) document.getElementById('select-title').innerText = "你是 P2 (Client)。等待 P1 選擇...";
+    });
+
+    conn.on('data', (data) => {
+        if(data.type === 'char_select') {
+            if(isHost) {
+                // P2 selected
+                p2CharIndex = data.index;
+                startGame(); // Host starts game
+                sendOnlineData({type:'start_game', p1: p1CharIndex, p2: p2CharIndex});
+            }
+        }
+        if(data.type === 'start_game') {
+            p1CharIndex = data.p1;
+            p2CharIndex = data.p2;
+            startGame();
+        }
+        if(data.type === 'input') {
+            // Host receives input from Client
+            if (isHost) {
+                const targetPid = 'p2';
+                if(data.state) {
+                    inputState[targetPid] = inputState[targetPid] || {}; inputState[targetPid][data.key] = true;
+                    if(data.key.startsWith('s') || data.key==='dodge' || data.key==='atk') handleAction(targetPid, data.key);
+                } else {
+                    if(inputState[targetPid]) inputState[targetPid][data.key] = false;
+                }
+            }
+        }
+        // --- Sync State Reception (Client Side) ---
+        if (data.type === 'sync' && !isHost && players.length >= 2) {
+            // Client receives state from Host
+            const p1Data = data.p1;
+            const p2Data = data.p2;
+            
+            // Interpolate or set positions
+            // 為了防止瞬移，使用插值，但為了防止不同步，權重設高一點
+            const lerp = 0.5; 
+            players[0].x += (p1Data.x - players[0].x) * lerp;
+            players[0].y += (p1Data.y - players[0].y) * lerp;
+            players[0].hp = p1Data.hp;
+            players[0].facingRight = p1Data.facingRight;
+            
+            players[1].x += (p2Data.x - players[1].x) * lerp;
+            players[1].y += (p2Data.y - players[1].y) * lerp;
+            players[1].hp = p2Data.hp;
+            players[1].facingRight = p2Data.facingRight;
+            
+            updateHp();
+        }
+        
+        if (data.type === 'game_over' && !isHost) {
+             endGame(data.winner);
+        }
+    });
+}
+
+function sendOnlineData(data) {
+    if(conn && conn.open) conn.send(data);
+}
+
+function copyRoomId() {
+    const copyText = document.getElementById("my-room-id");
+    copyText.select();
+    document.execCommand("copy");
+    alert("房間號已複製: " + copyText.value);
+}
+
+// --- Selection Logic Update ---
+function initCharSelect() {
+    const g = document.getElementById('char-grid'); g.innerHTML='';
+    CHARACTERS.forEach((c,i)=>{
+        const d=document.createElement('div'); d.className='char-card'; 
+        if(c.id==='gale' || c.id==='titan' || c.id==='graviton' || c.id==='ohm') d.innerHTML+='<span class="new-tag">NEW</span>';
+        d.innerHTML+=`<div class="char-icon" style="color:${c.color}">${c.icon}</div><div class="char-name">${c.name}</div>`;
+        d.onclick=()=>showCharInfo(i); d.id=`c-${i}`; g.appendChild(d);
+    });
+}
+function showCharInfo(i) {
+    document.querySelectorAll('.char-card').forEach(c=>c.classList.remove('selected'));
+    document.getElementById(`c-${i}`).classList.add('selected');
+    const c = CHARACTERS[i];
+    document.getElementById('info-placeholder').style.display = 'none';
+    document.getElementById('info-panel').style.display = 'block';
+    document.getElementById('info-name').innerText = c.name;
+    document.getElementById('info-name').style.color = c.color;
+    document.getElementById('info-role').innerText = "生命: " + c.hp + " | 速度: " + c.speed;
+    document.getElementById('info-desc').innerHTML = c.desc + (c.counters ? `<div class="counter-info">${c.counters}</div>` : "");
+    let html = ''; c.skills.forEach(s => html += `<div class="skill-info"><div class="skill-name">${s.name}</div><div class="skill-detail">${s.desc}</div></div>`);
+    document.getElementById('info-skills').innerHTML = html;
+    
+    const btn = document.getElementById('confirm-btn');
+    
+    if (gameMode === 'ONLINE') {
+        // Online selection logic
+        if (isHost) {
+             btn.style.display = 'block';
+             btn.disabled = false;
+             btn.innerText = "確認選擇 (P1)";
+             btn.onclick = () => {
+                 p1CharIndex = i;
+                 document.getElementById('select-title').innerText = "等待 P2 選擇...";
+                 btn.disabled = true;
+                 // Wait for P2 to send selection via network, handled in conn.on('data')
+             };
+        } else {
+             btn.style.display = 'block';
+             btn.disabled = false;
+             btn.innerText = "確認選擇 (P2)";
+             btn.onclick = () => {
+                 sendOnlineData({type: 'char_select', index: i});
+                 document.getElementById('select-title').innerText = "等待主機開始...";
+                 btn.disabled = true;
+             };
+        }
+    } else {
+        // Local logic
+        btn.disabled = false; btn.onclick = () => confirmSelection(i); btn.innerText = `鎖定 ${turn}`;
+    }
+}
+
+function confirmSelection(i) {
+    if (turn === 'P1') {
+        p1CharIndex = i; turn = 'P2'; document.getElementById('select-title').innerText = "P2 (紅色) 請選擇"; document.getElementById('select-title').style.color = '#f44'; document.getElementById('confirm-btn').disabled = true;
+        if (gameMode !== 'PVP') { p2CharIndex = Math.floor(Math.random() * CHARACTERS.length); startGame(); }
+    } else { p2CharIndex = i; startGame(); }
+}
+
+function startGame() {
+    gameState='FIGHT'; document.getElementById('char-select-screen').style.display='none';
+    
+    if (gameMode === 'ONLINE') {
+        document.getElementById('p1-controls').style.display = (onlineRole === 'p1') ? 'block' : 'none';
+        document.getElementById('p2-controls').style.display = (onlineRole === 'p2') ? 'block' : 'none';
+    } else {
+        document.getElementById('p1-controls').style.display='block'; 
+        if(gameMode === 'PVP') document.getElementById('p2-controls').style.display='block';
+    }
+
+    players = [new Player('p1',100,CHARACTERS[p1CharIndex]), new Player('p2',canvas.width-100,CHARACTERS[p2CharIndex])];
+    if(gameMode !== 'PVP' && gameMode !== 'ONLINE') players[1].inputAI = {}; 
+    document.getElementById('p1-name').innerText=players[0].data.name; document.getElementById('p2-name').innerText=players[1].data.name;
+    ['p1','p2'].forEach((pid,i)=>{ for(let j=0;j<3;j++) { const el=document.querySelector(`.${pid}-s${j+1} .skill-label`); if(el) el.innerText=players[i].data.skills[j].name.substring(0,2); } });
+    weatherSystem = new WeatherSystem();
+    
+    if (gameMode === 'TRAINING') document.getElementById('training-msg').style.display = 'block';
+    
+    updateHp(); gameLoop();
+}
+
+function updateHp() { if(players.length<2)return; document.getElementById('p1-hp').style.width=(players[0].hp/players[0].maxHp*100)+'%'; document.getElementById('p2-hp').style.width=(players[1].hp/players[1].maxHp*100)+'%'; }
+function updateCd(pid,i,max) {
+    const el = document.querySelector(`.${pid}-${i==='dodge'?'dodge':'s'+(i+1)} .cd-overlay`);
+    if(!el) return; el.style.display='flex'; let f=max;
+    const t = setInterval(()=>{ f-=5; el.innerText=Math.ceil(f/60); if(f<=0){clearInterval(t);el.style.display='none';} }, 80);
+    activeTimers.push(t);
+}
+
+function endGame(w) { 
+    // Host Authority for Game Over
+    if (gameMode === 'ONLINE' && isHost) {
+        sendOnlineData({type: 'game_over', winner: w});
+    }
+    
+    gameState='END'; document.getElementById('game-over-msg').style.display='block'; document.getElementById('winner-text').innerText=w+" 獲勝!"; 
+}
+
+function resetGame() {
+    gameState='SELECT'; p1CharIndex=-1; p2CharIndex=-1; turn='P1'; players=[]; projectiles=[]; effects=[]; floatingTexts=[]; inputState={p1:{},p2:{}};
+    globalRule=null; globalRuleTimer=0; timeScale = 1.0;
+    if(gameLoopId) cancelAnimationFrame(gameLoopId); gameLoopId = null; 
+    
+    document.getElementById('game-over-msg').style.display='none'; document.getElementById('p1-controls').style.display='none'; document.getElementById('p2-controls').style.display='none';
+    document.getElementById('char-select-screen').style.display='flex'; document.getElementById('select-title').innerText="P1 (藍色) 選擇"; document.getElementById('select-title').style.color='#0af';
+    document.getElementById('info-panel').style.display='none'; document.getElementById('info-placeholder').style.display='block';
+    document.getElementById('training-msg').style.display = 'none';
+    
+    document.getElementById('p1-ling-bar').style.display='none'; document.getElementById('p2-ling-bar').style.display='none';
+    document.getElementById('p1-resource-bar').style.display='none'; document.getElementById('p2-resource-bar').style.display='none';
+
+    activeTimers.forEach(clearInterval); activeTimers=[];
+    initCharSelect();
+    
+    // If online, reset connection UI but keep connection if possible, or just full reset
+    if(gameMode === 'ONLINE') {
+        document.getElementById('online-panel').style.display = 'block';
+        document.getElementById('confirm-btn').style.display = 'none';
+        document.getElementById('select-title').innerText = isHost ? "你是 P1 (Host)。請選擇角色" : "你是 P2 (Client)。等待 P1 選擇...";
+    }
+}
+
+function showUltAnim(text) {
+    const overlay = document.getElementById('ult-overlay');
+    const txt = document.getElementById('ult-text');
+    txt.innerText = text;
+    overlay.style.display = 'flex';
+    setTimeout(() => overlay.style.display = 'none', 1500);
+}
+
+function gameLoop() {
+    if(gameState==='FIGHT') {
+        // --- Host Sync Broadcast ---
+        if (gameMode === 'ONLINE' && isHost && players.length >= 2) {
+            sendOnlineData({
+                type: 'sync',
+                p1: { x: players[0].x, y: players[0].y, hp: players[0].hp, facingRight: players[0].facingRight },
+                p2: { x: players[1].x, y: players[1].y, hp: players[1].hp, facingRight: players[1].facingRight }
+            });
+        }
+        // ---------------------------
+
+        ctx.save();
+        if (shakeTimer > 0) {
+            shakeTimer--;
+            const dx = (Math.random() - 0.5) * 10;
+            const dy = (Math.random() - 0.5) * 10;
+            ctx.translate(dx, dy);
+        }
+        
+        ctx.fillStyle='#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
+        
+        const isTimeStopped = players.some(p => p.timeStopActive > 0);
+        if (isTimeStopped) {
+            ctx.fillStyle = '#333'; ctx.fillRect(0,0,canvas.width,canvas.height); 
+            ctx.filter = 'grayscale(100%) contrast(1.2)';
+        }
+
+        if (globalRule === 'chaos') { ctx.fillStyle = 'rgba(50,0,50,0.2)'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+        else if (globalRule === 'silence') { ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,canvas.width,canvas.height); }
+        
+        if (weatherSystem) { weatherSystem.update(); weatherSystem.draw(ctx); }
+
+        ctx.fillStyle='#333'; ctx.fillRect(0,GROUND_Y,canvas.width,canvas.height-GROUND_Y);
+        updateGlobalRules();
+        
+        if (gameMode === 'TRAINING') {
+            players.forEach(p => {
+                if (p.hp < p.maxHp) p.hp = p.maxHp;
+                if (p.data.id === 'ember') p.energy = 100;
+                if (p.data.id === 'teslam') p.energy = 100;
+                if (p.data.id === 'graviton') p.energy = 100;
+                if (p.data.id === 'ohm') p.ohmStorage = 3;
+                if (p.data.id === 'lingxiao') p.danyuan = 3;
+            });
+        }
+
+        [...players,...projectiles,...effects, ...floatingTexts].forEach(o=>o.update());
+        projectiles=projectiles.filter(p=>!p.marked); effects=effects.filter(e=>!e.marked); floatingTexts=floatingTexts.filter(t=>t.life>0);
+        [...effects,...players,...projectiles, ...floatingTexts].forEach(o=>o.draw(ctx));
+        
+        ctx.restore();
+        ctx.filter = 'none'; 
+    }
+    gameLoopId = requestAnimationFrame(gameLoop);
+}
+
+// AI & Status Guide
+function showStatusGuide() { 
+    const guide = `
+    <table class="status-table">
+        <tr><td>⬇️ 超重力 (High G)</td><td>格拉維頓施加，無法跳躍且持續扣血。</td></tr>
+        <tr><td>⬆️ 反重力 (Zero G)</td><td>格拉維頓施加，移動與跳躍大幅增強。</td></tr>
+        <tr><td>⚡ 負荷 (Load)</td><td>特斯拉姆專屬，滿負荷可飛升。</td></tr>
+        <tr><td>🔥 過載 (Overload)</td><td>燼滅專屬，能量>75%時傷害提升。</td></tr>
+        <tr><td>⏳ 回溯 (Rewind)</td><td>克洛諾斯專屬，回到過去狀態。</td></tr>
+        <tr><td>💫 暈眩 (Stun)</td><td>無法移動或攻擊。</td></tr>
+        <tr><td>☠️ 中毒 (Poison)</td><td>持續扣血。</td></tr>
+        <tr><td>🔥 燃燒 (Burn)</td><td>持續扣血。</td></tr>
+        <tr><td>🩸 流血 (Bleed)</td><td>移動時受到傷害。</td></tr>
+        <tr><td>📉 虛弱 (Weak)</td><td>造成傷害降低。</td></tr>
+        <tr><td>💔 易傷 (Vulnerable)</td><td>受到傷害增加。</td></tr>
+        <tr><td>🛡️ 堅韌 (Defense Up)</td><td>受到傷害減少。</td></tr>
+        <tr><td>❄️ 緩速 (Slow)</td><td>移動速度降低。</td></tr>
+        <tr><td>🔗 命運連結 (Link)</td><td>雙方共享受到的傷害。</td></tr>
+        <tr><td>🐌 淤滯 (Stasis)</td><td>凌霄專屬，技能使用過快導致冷卻變慢。</td></tr>
+        <tr><td>⛔ 沉默 (Silence)</td><td>無法使用技能 (全局規則)。</td></tr>
+    </table>
+    `;
+    showAiModal(guide); 
+}
+function showAiModal(t) { document.getElementById('ai-modal').style.display='block'; document.getElementById('ai-content').innerHTML=t; }
+async function askAiForTips() {
+    if(p1CharIndex===-1 && turn==='P1') { showAiModal("請先點擊選擇一個角色。"); return; }
+    const c = CHARACTERS[turn==='P1'?p1CharIndex:p2CharIndex];
+    if(!c) { showAiModal("請先點擊選擇一個角色。"); return; }
+    showAiModal("AI 分析中...");
+    const res = await callGemini(`格鬥遊戲建議：角色${c.name}，技能${c.skills.map(s=>s.name)}。請給3個短建議(繁體中文)。`);
+    document.getElementById('ai-content').innerText = res;
+}
+async function generateBattleReport() {
+    showAiModal("AI 撰寫戰報中...");
+    const w = players[0].hp>0?players[0]:players[1]; const l = players[0].hp>0?players[1]:players[0];
+    const res = await callGemini(`賽後講評：贏家${w.data.name}，輸家${l.data.name}。請用激動語氣評論(80字內繁體中文)。`);
+    document.getElementById('ai-content').innerText = res;
+}
+async function triggerTaunt(pid) {
+    const p = players.find(pl=>pl.id===pid); if(!p) return;
+    effects.push(new SpeechBubble(p, "..."));
+    const res = await callGemini(`角色${p.data.name}的嘲諷台詞(10字內繁體中文，不要引號)。`);
+    effects = effects.filter(e=>!(e instanceof SpeechBubble && e.o===p));
+    effects.push(new SpeechBubble(p, res));
+}
+
+setupTouchListeners();
+initCharSelect();
+</script>
+</body>
+</html>
